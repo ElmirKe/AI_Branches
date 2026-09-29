@@ -1,0 +1,571 @@
+/* ---------- темы ---------- */
+.theme-light {
+  --bg-app: #eff3f6;
+  --bg-card: #ffffff;
+  --border: #d1d8de;
+  --text-primary: #16232b;
+  --text-secondary: #7d8a8c;
+  --main-line: #17627e;
+  --fork-line: #56a8c4;
+  --gold: #a68329;
+  --on-accent: #ffffff;
+}
+
+.theme-dark {
+  --bg-app: #0e1518;
+  --bg-card: #172226;
+  --border: #263237;
+  --text-primary: #eeeeee;
+  --text-secondary: #849296;
+  --main-line: #5cc1e0;
+  --fork-line: #9be0ef;
+  --gold: #d4b440;
+  --on-accent: #0e1518;
+}
+
+/* ---------- база ---------- */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family: "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+textarea {
+  font-family: inherit;
+}
+
+.app {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.caption {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.pending {
+  color: var(--text-secondary);
+}
+
+/* ---------- кнопки ---------- */
+.btn {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--main-line);
+}
+
+.btn.active {
+  border-color: var(--main-line);
+  color: var(--main-line);
+}
+
+.btn-primary {
+  background: var(--main-line);
+  border-color: var(--main-line);
+  color: var(--on-accent);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.icon-btn {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.icon-btn:hover {
+  color: var(--text-primary);
+}
+
+/* ---------- сайдбар ---------- */
+.sidebar {
+  width: 210px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 12px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.brand {
+  font-size: 18px;
+  font-weight: 600;
+  padding: 4px 6px 6px;
+}
+
+.chat-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-item {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.chat-item:hover,
+.chat-item.active {
+  background: var(--bg-app);
+}
+
+.chat-item.active .chat-title {
+  color: var(--main-line);
+}
+
+.chat-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-item small {
+  display: block;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.theme-switch {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.theme-switch button {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 7px 0;
+  cursor: pointer;
+}
+
+.theme-switch button.active {
+  background: var(--main-line);
+  color: var(--on-accent);
+}
+
+/* ---------- холст ---------- */
+.canvas-area {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.canvas {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.canvas-head {
+  padding: 22px 28px 8px;
+  min-height: 82px;
+}
+
+.canvas-head h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.canvas-head p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+}
+
+.canvas-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.canvas-inner {
+  position: relative;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+.canvas-inner svg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* ---------- карточка узла ---------- */
+.card {
+  position: absolute;
+  z-index: 2;
+  width: 200px;
+  height: 78px;
+  padding: 7px 10px 0;
+  border-radius: 10px;
+  border: 1.5px solid var(--main-line);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+}
+
+.card.level-fork {
+  border-color: var(--fork-line);
+}
+
+.card.merge {
+  border-color: var(--gold);
+}
+
+.card.in-family {
+  border-color: transparent;
+  border-radius: 0;
+}
+
+.card.in-family.merge::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--gold);
+  pointer-events: none;
+}
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  height: 12px;
+  line-height: 12px;
+  margin-bottom: 4px;
+}
+
+.card-action {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--main-line);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.card.merge .card-action {
+  color: var(--gold);
+}
+
+.card-action:hover {
+  text-decoration: underline;
+}
+
+.card-text {
+  position: relative;
+  height: 54px;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.card-text.overflow::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 20px;
+  background: linear-gradient(transparent, var(--bg-card));
+}
+
+/* режим слияния */
+.card.dimmed {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.card.candidate {
+  outline: 2px dashed var(--gold);
+  outline-offset: -4px;
+}
+
+.card.picked {
+  outline: 2px solid var(--gold);
+  outline-offset: -4px;
+}
+
+.merge-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1.5px solid var(--gold);
+  border-radius: 10px;
+  background: var(--bg-card);
+  width: fit-content;
+  max-width: 100%;
+}
+
+.merge-bar .caption {
+  color: var(--gold);
+}
+
+/* ---------- семья сестёр ---------- */
+.family-bg {
+  position: absolute;
+  z-index: 1;
+  background: var(--bg-card);
+  border-radius: 4px 8px 8px 8px;
+}
+
+.family-frame {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  border: 1.5px solid var(--main-line);
+  border-radius: 4px 8px 8px 8px;
+}
+
+.family-frame.dimmed {
+  opacity: 0.4;
+}
+
+/* нижний сегмент семьи (по другую сторону дорожки) — без острого угла под плашку */
+.family-cont {
+  border-radius: 8px;
+}
+
+.family-label {
+  position: absolute;
+  left: -1.5px;
+  bottom: 100%;
+  height: 22px;
+  line-height: 22px;
+  max-width: 200px;
+  padding: 0 8px;
+  background: var(--main-line);
+  color: var(--on-accent);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 6px 6px 0 0;
+}
+
+.family-divider {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ---------- стартовый экран ---------- */
+.start {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.start-box {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.start-box h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.start-box p {
+  margin: 0 0 4px;
+  color: var(--text-secondary);
+}
+
+.start-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ---------- поле ввода ---------- */
+textarea {
+  width: 100%;
+  resize: none;
+  min-height: 76px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+}
+
+textarea:focus {
+  border-color: var(--main-line);
+}
+
+textarea::placeholder {
+  color: var(--text-secondary);
+}
+
+textarea:disabled {
+  opacity: 0.6;
+}
+
+/* ---------- правая панель ---------- */
+.panel {
+  width: 420px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel-msgs {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.msg .caption {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.msg.merge .caption {
+  color: var(--gold);
+}
+
+.msg-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.panel-hint {
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.panel-tools {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 20px 16px;
+}
+
+.composer-note {
+  color: var(--main-line);
+}
+
+.composer-actions {
+  display: flex;
+  justify-content: flex-end;
+}
