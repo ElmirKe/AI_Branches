@@ -7,6 +7,8 @@ export interface Message {
   branch: string; // имя ветки
   text: string;
   pending?: boolean;
+  /** ответ не удалось получить: текст — сообщение об ошибке, в контекст ИИ не попадает */
+  error?: boolean;
 }
 
 export interface ChatTree {

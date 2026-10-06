@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, useMemo, useReducer, type ReactNode } from "react";
 import type { ChatTree, Message, Theme } from "./types";
-import { detectList, generateReply, replyDelay } from "./lib/api";
+import { detectList, fetchReply, generateReply, type ChatTurn } from "./lib/api";
 import {
   buildIndex,
   buildMergeNode,
   isMergeNode,
+  lineage,
   ROOT_BRANCH,
   sisters,
   truncate,
@@ -34,7 +35,7 @@ type Action =
   | { type: "SET_THEME"; theme: Theme }
   | { type: "SET_BRANCH_MODE"; on: boolean }
   | { type: "ADD_MESSAGES"; treeId: string; messages: Message[]; select?: string; title?: string }
-  | { type: "RESOLVE_PENDING"; treeId: string; id: string; text: string }
+  | { type: "RESOLVE_PENDING"; treeId: string; id: string; text: string; error?: boolean }
   | { type: "MERGE_START"; id: string }
   | { type: "MERGE_TOGGLE"; id: string }
   | { type: "MERGE_CONFIRM" }
@@ -106,7 +107,9 @@ function reducer(state: State, a: Action): State {
     case "RESOLVE_PENDING":
       return updateTree(state, a.treeId, (t) => ({
         ...t,
-        messages: t.messages.map((m) => (m.id === a.id ? { ...m, text: a.text, pending: false } : m)),
+        messages: t.messages.map((m) =>
+          m.id === a.id ? { ...m, text: a.text, pending: false, error: a.error } : m,
+        ),
       }));
     case "MERGE_START":
       return { ...state, merge: { anchorId: a.id, selected: [] } };
@@ -190,12 +193,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const treeId = currentTree.id;
       let userMsg: Message;
       let title: string | undefined;
+      let history: Message[] = []; // родословная: что ИИ уже «знает» на этом пути
       if (currentTree.messages.length === 0) {
         userMsg = { id: uid(), parents: [], role: "user", branch: ROOT_BRANCH, text: trimmed };
         title = truncate(trimmed, 40);
       } else {
         const parent = state.selectedId ? index.byId.get(state.selectedId) : undefined;
-        if (!parent) return;
+        if (!parent || parent.pending) return; // ответ ещё печатается — ждём
+        history = lineage(parent.id, index.byId);
         // если точка уже продолжена той же веткой — новое сообщение становится ответвлением
         const hasCont = (index.structChildren.get(parent.id) ?? []).some(
           (k) => k.branch === parent.branch && !isMergeNode(k),
@@ -218,9 +223,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         pending: true,
       };
       dispatch({ type: "ADD_MESSAGES", treeId, messages: [userMsg, reply], select: reply.id, title });
-      window.setTimeout(() => {
-        dispatch({ type: "RESOLVE_PENDING", treeId, id: reply.id, text: generateReply(trimmed) });
-      }, replyDelay());
+
+      // ИИ получает только путь от корня до этого вопроса — соседних веток в нём нет
+      const context: ChatTurn[] = [...history, userMsg]
+        .filter((m) => !m.pending && !m.error && m.text.trim() !== "")
+        .map((m) => ({ role: m.role, content: m.text }));
+      fetchReply(context).then(
+        (text) => dispatch({ type: "RESOLVE_PENDING", treeId, id: reply.id, text }),
+        (e: unknown) =>
+          dispatch({
+            type: "RESOLVE_PENDING",
+            treeId,
+            id: reply.id,
+            text: "⚠ " + (e instanceof Error && e.message ? e.message : "Не удалось получить ответ."),
+            error: true,
+          }),
+      );
     },
     [currentTree, index, state.selectedId, state.branchMode],
   );
