@@ -32,10 +32,19 @@ public class Main {
                 .filter(o -> !o.isEmpty())
                 .collect(Collectors.toCollection(HashSet::new));
 
-        AIService ai = new AIService();
+        // Список моделей по порядку: если первая перегружена, берётся следующая.
+        // Свой список: GEMINI_MODELS=gemini-flash-lite-latest,gemini-2.5-flash-lite
+        java.util.List<String> models = System.getenv("GEMINI_MODELS") == null
+                || System.getenv("GEMINI_MODELS").isBlank()
+                ? GeminiClient.DEFAULT_MODELS
+                : Arrays.stream(System.getenv("GEMINI_MODELS").split(","))
+                        .map(String::trim).filter(m -> !m.isEmpty()).toList();
+
+        GeminiClient ai = new GeminiClient(apiKey, models);
         new ApiServer(ai::ask, origins).start(port);
 
         System.out.println("AI Chat backend запущен: http://localhost:" + port + "/api/health");
+        System.out.println("Модели Gemini (по очереди): " + models);
         System.out.println("Разрешённые адреса фронтенда (CORS): " + origins);
     }
 }

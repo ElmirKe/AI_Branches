@@ -18,8 +18,10 @@
 
 ```powershell
 $env:GEMINI_API_KEY="ваш_ключ"
-mvn compile exec:java "-Dexec.mainClass=org.example.Main"
+mvn compile exec:java "-Dexec.mainClass=org.example.Main" "-Dmaven.compiler.release=17"
 ```
+
+(`-Dmaven.compiler.release=17` нужен, если у вас JDK ниже 22, а в `pom.xml` указана 22.)
 
 Должно появиться `AI Chat backend запущен: http://localhost:8080/api/health`.
 Проверка: откройте http://localhost:8080/api/health — увидите `{"status":"ok"}`.
@@ -30,6 +32,7 @@ mvn compile exec:java "-Dexec.mainClass=org.example.Main"
 |-------------------|----------------------------------------------------------------|-------------------------|
 | `GEMINI_API_KEY`  | ключ Gemini (**обязателен**, хранится только на сервере)        | —                       |
 | `PORT`            | порт сервера                                                   | `8080`                  |
+| `GEMINI_MODELS`   | модели Gemini по очереди: если первая перегружена (503), берётся следующая | `gemini-flash-lite-latest,gemini-3.1-flash-lite,gemini-2.5-flash-lite` |
 | `ALLOWED_ORIGINS` | адреса сайта, которым разрешено обращаться к серверу (через запятую) | `http://localhost:5173` |
 
 ## 2. Frontend (в другом окне терминала)
@@ -48,8 +51,9 @@ npm run dev
 
 - В узле появилось «⚠ Не удалось связаться с сервером» — backend не запущен, или порт другой,
   или адрес сайта не указан в `ALLOWED_ORIGINS`.
-- «⚠ ИИ-сервис не ответил» — сервер работает, но Gemini вернул ошибку (неверный ключ,
-  лимиты, неверное имя модели). Причина — в окне, где запущен backend.
+- «⚠ ИИ сейчас недоступен или перегружен» — Google отвечает 503/429 на все модели из списка;
+  подождите минуту или задайте другие модели в `GEMINI_MODELS`. Подробности — в окне backend (строки `[gemini]`).
+- «⚠ Gemini не принял ключ» — неверный/отозванный `GEMINI_API_KEY`.
 - После изменения `.env.local` перезапустите `npm run dev`.
 
 ## API (для справки)

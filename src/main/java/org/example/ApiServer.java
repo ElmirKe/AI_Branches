@@ -102,6 +102,11 @@ public final class ApiServer {
             String answer;
             try {
                 answer = ai.apply(history);
+            } catch (AiException e) {
+                // Текст такой ошибки уже безопасен и понятен пользователю.
+                System.err.println("[api] ИИ: " + e.getMessage());
+                sendJson(ex, 502, error(e.getMessage()), null);
+                return;
             } catch (RuntimeException e) {
                 // Подробности — только в лог сервера: в тексте ошибки SDK могут быть детали запроса.
                 System.err.println("[api] ИИ вернул ошибку: " + e);
