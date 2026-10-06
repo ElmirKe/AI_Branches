@@ -26,7 +26,7 @@ export function BranchPanel() {
     (k) => k.branch === selected.branch && !isMergeNode(k),
   );
   const branchOn = state.branchMode || forcedBranch;
-  const canSend = text.trim().length > 0 && !merging;
+  const canSend = text.trim().length > 0 && !merging && !selected.pending;
 
   const submit = () => {
     if (!canSend) return;
