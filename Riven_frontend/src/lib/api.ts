@@ -90,6 +90,31 @@ export async function fetchReply(context: ChatTurn[]): Promise<string> {
   }
 }
 
+/**
+ * Короткое название по смыслу (чат — до 4 слов, семья — до 3).
+ * Возвращает null, если сервера нет или он не ответил — тогда остаётся локальная выжимка.
+ */
+export async function fetchTitle(kind: "chat" | "family", texts: string[]): Promise<string | null> {
+  if (!usesRealBackend || texts.length === 0) return null;
+  const ctrl = new AbortController();
+  const timer = window.setTimeout(() => ctrl.abort(), 45_000);
+  try {
+    const res = await fetch(`${API_URL}/api/title`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind, texts }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return null;
+    const data: { title?: unknown } = await res.json();
+    return typeof data.title === "string" && data.title.trim() ? data.title.trim().slice(0, 60) : null;
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 const ITEM_RE =/^\s*(\d+[.)]|[-–—•*]\s)/;
 const STRIP_RE = /^\s*(\d+[.)]\s*|[-–—•*]\s+)/;
 

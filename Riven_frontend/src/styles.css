@@ -221,8 +221,16 @@ textarea {
   min-height: 82px;
 }
 
+.canvas-head-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 .canvas-head h1 {
   margin: 0;
+  min-width: 0;
   font-size: 26px;
   font-weight: 700;
   line-height: 1.2;
@@ -405,7 +413,7 @@ textarea {
   bottom: 100%;
   height: 22px;
   line-height: 22px;
-  max-width: 200px;
+  max-width: 240px;
   padding: 0 8px;
   background: var(--main-line);
   color: var(--on-accent);
@@ -425,6 +433,16 @@ textarea {
   right: 0;
   height: 1px;
   background: var(--border);
+}
+
+/* вертикальный режим: карточки семьи стоят в ряд, разделители — вертикальные */
+.family-divider-v {
+  left: auto;
+  right: auto;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  height: auto;
 }
 
 /* ---------- стартовый экран ---------- */
@@ -568,4 +586,27 @@ textarea:disabled {
 .composer-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+/* ---------- переключатель направления дерева ---------- */
+.orient-switch {
+  display: flex;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.orient-switch button {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 7px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.orient-switch button.active {
+  background: var(--main-line);
+  color: var(--on-accent);
 }

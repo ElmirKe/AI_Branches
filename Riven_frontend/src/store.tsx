@@ -1,6 +1,7 @@
-import { createContext, useCallback, useContext, useMemo, useReducer, type ReactNode } from "react";
-import type { ChatTree, Message, Theme } from "./types";
-import { detectList, fetchReply, generateReply, type ChatTurn } from "./lib/api";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from "react";
+import type { ChatTree, Message, Orientation, Theme } from "./types";
+import { detectList, fetchReply, fetchTitle, generateReply, type ChatTurn } from "./lib/api";
+import { shortTitle } from "./lib/title";
 import {
   buildIndex,
   buildMergeNode,
@@ -23,6 +24,7 @@ export interface State {
   currentTreeId: string;
   selectedId: string | null;
   theme: Theme;
+  orientation: Orientation;
   branchMode: boolean;
   merge: MergeState | null;
   expanded: string[];
@@ -33,6 +35,9 @@ type Action =
   | { type: "SELECT_TREE"; id: string }
   | { type: "SELECT_NODE"; id: string | null }
   | { type: "SET_THEME"; theme: Theme }
+  | { type: "SET_ORIENTATION"; orientation: Orientation }
+  | { type: "SET_TITLE"; treeId: string; title: string; ifCurrent: string }
+  | { type: "SET_FAMILY_TITLE"; treeId: string; parentId: string; title: string }
   | { type: "SET_BRANCH_MODE"; on: boolean }
   | { type: "ADD_MESSAGES"; treeId: string; messages: Message[]; select?: string; title?: string }
   | { type: "RESOLVE_PENDING"; treeId: string; id: string; text: string; error?: boolean }
@@ -58,7 +63,7 @@ function seedTree(): ChatTree {
   const s2 = sistersMsgs[1];
   return {
     id: "demo",
-    title: "Как спланировать запуск продукта?",
+    title: "Запуск продукта",
     createdAt: Date.now(),
     messages: [
       { id: "r1", parents: [], role: "user", branch: ROOT_BRANCH, text: "Как спланировать запуск продукта?" },
@@ -94,6 +99,16 @@ function reducer(state: State, a: Action): State {
       return { ...state, selectedId: a.id, branchMode: false };
     case "SET_THEME":
       return { ...state, theme: a.theme };
+    case "SET_ORIENTATION":
+      return { ...state, orientation: a.orientation };
+    case "SET_TITLE":
+      // название по смыслу заменяет локальную выжимку, только если её не успели изменить
+      return updateTree(state, a.treeId, (t) => (t.title === a.ifCurrent ? { ...t, title: a.title } : t));
+    case "SET_FAMILY_TITLE":
+      return updateTree(state, a.treeId, (t) => ({
+        ...t,
+        familyTitles: { ...t.familyTitles, [a.parentId]: a.title },
+      }));
     case "SET_BRANCH_MODE":
       return { ...state, branchMode: a.on };
     case "ADD_MESSAGES": {
@@ -150,6 +165,7 @@ export interface Store {
   selectTree: (id: string) => void;
   selectNode: (id: string | null) => void;
   setTheme: (t: Theme) => void;
+  setOrientation: (o: Orientation) => void;
   setBranchMode: (on: boolean) => void;
   sendMessage: (text: string) => void;
   decompose: (id: string) => void;
@@ -169,6 +185,7 @@ function initialState(): State {
     currentTreeId: demo.id,
     selectedId: null,
     theme: "light",
+    orientation: "horizontal",
     branchMode: false,
     merge: null,
     expanded: [],
@@ -186,6 +203,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [state.merge, index],
   );
 
+  // Названия семей по смыслу: как только у сообщения появилось 2+ ответвления, просим ИИ
+  // придумать общее название. Пока оно не пришло, на плашке стоит локальная выжимка.
+  const requestedFamilies = useRef(new Set<string>());
+  useEffect(() => {
+    for (const tree of state.trees) {
+      if (tree.messages.length === 0) continue;
+      const idx = buildIndex(tree.messages);
+      for (const m of tree.messages) {
+        if (m.pending || m.text.trim() === "" || isMergeNode(m)) continue;
+        const key = `${tree.id}:${m.id}`;
+        if (requestedFamilies.current.has(key) || tree.familyTitles?.[m.id]) continue;
+        const kids = (idx.structChildren.get(m.id) ?? []).filter((k) => !idx.consumed.has(k.id));
+        const cont = kids.find((k) => k.branch === m.branch && !isMergeNode(k));
+        const forks = kids.filter((k) => k !== cont);
+        if (forks.length < 2) continue;
+        requestedFamilies.current.add(key);
+        const texts = [m.text.slice(0, 1200), ...forks.slice(0, 7).map((f) => f.text.slice(0, 200))].filter(
+          (t) => t.trim() !== "",
+        );
+        fetchTitle("family", texts).then((t) => {
+          if (t) dispatch({ type: "SET_FAMILY_TITLE", treeId: tree.id, parentId: m.id, title: t });
+        });
+      }
+    }
+  }, [state.trees]);
+
   const sendMessage = useCallback(
     (text: string) => {
       const trimmed = text.trim();
@@ -196,7 +239,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       let history: Message[] = []; // родословная: что ИИ уже «знает» на этом пути
       if (currentTree.messages.length === 0) {
         userMsg = { id: uid(), parents: [], role: "user", branch: ROOT_BRANCH, text: trimmed };
-        title = truncate(trimmed, 40);
+        title = shortTitle(trimmed, 4); // сразу — локальная выжимка, ниже её заменит название от ИИ
       } else {
         const parent = state.selectedId ? index.byId.get(state.selectedId) : undefined;
         if (!parent || parent.pending) return; // ответ ещё печатается — ждём
@@ -223,6 +266,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         pending: true,
       };
       dispatch({ type: "ADD_MESSAGES", treeId, messages: [userMsg, reply], select: reply.id, title });
+      if (title) {
+        // название чата — выжимка смысла первого сообщения (до 4 слов), а не его копия
+        fetchTitle("chat", [trimmed]).then((t) => {
+          if (t) dispatch({ type: "SET_TITLE", treeId, title: t, ifCurrent: title });
+        });
+      }
 
       // ИИ получает только путь от корня до этого вопроса — соседних веток в нём нет
       const context: ChatTurn[] = [...history, userMsg]
@@ -271,6 +320,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     selectTree: (id) => dispatch({ type: "SELECT_TREE", id }),
     selectNode: (id) => dispatch({ type: "SELECT_NODE", id }),
     setTheme: (theme) => dispatch({ type: "SET_THEME", theme }),
+    setOrientation: (orientation) => dispatch({ type: "SET_ORIENTATION", orientation }),
     setBranchMode: (on) => dispatch({ type: "SET_BRANCH_MODE", on }),
     sendMessage,
     decompose,

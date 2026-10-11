@@ -8,8 +8,12 @@ import { MergeMode } from "./MergeMode";
 const WIDTHS = [3, 1.8, 1.2];
 
 export function TreeCanvas() {
-  const { state, currentTree, index, expandedSet, mergeCandidates, selectNode } = useStore();
-  const layout = useMemo(() => computeLayout(index, expandedSet), [index, expandedSet]);
+  const { state, currentTree, index, expandedSet, mergeCandidates, selectNode, setOrientation } = useStore();
+  const orientation = state.orientation;
+  const layout = useMemo(
+    () => computeLayout(index, expandedSet, orientation, currentTree.familyTitles),
+    [index, expandedSet, orientation, currentTree.familyTitles],
+  );
   const merging = state.merge !== null;
 
   const onBackground = () => {
@@ -19,7 +23,27 @@ export function TreeCanvas() {
   return (
     <div className="canvas">
       <header className="canvas-head">
-        <h1>{currentTree.title}</h1>
+        <div className="canvas-head-row">
+          <h1>{currentTree.title}</h1>
+          <div className="orient-switch" role="group" aria-label="Направление дерева">
+            <button
+              className={orientation === "horizontal" ? "active" : ""}
+              aria-pressed={orientation === "horizontal"}
+              onClick={() => setOrientation("horizontal")}
+              title="Дерево растёт слева направо"
+            >
+              ↔ Горизонтально
+            </button>
+            <button
+              className={orientation === "vertical" ? "active" : ""}
+              aria-pressed={orientation === "vertical"}
+              onClick={() => setOrientation("vertical")}
+              title="Дерево растёт сверху вниз"
+            >
+              ↕ Вертикально
+            </button>
+          </div>
+        </div>
         {merging ? (
           <MergeMode />
         ) : (
@@ -45,6 +69,7 @@ export function TreeCanvas() {
               key={f.id}
               family={f}
               nodes={layout.nodes}
+              orientation={orientation}
               dimmed={
                 merging &&
                 !f.segments.some((seg) =>

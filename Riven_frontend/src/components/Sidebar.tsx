@@ -5,7 +5,7 @@ export function Sidebar() {
   const { state, newTree, selectTree, setTheme } = useStore();
   return (
     <aside className="sidebar">
-      <div className="brand">Форки</div>
+      <div className="brand">Riven</div>
       <button className="btn btn-primary" onClick={newTree}>
         + Новый чат
       </button>

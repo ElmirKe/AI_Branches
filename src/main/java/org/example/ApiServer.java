@@ -21,6 +21,8 @@ import java.util.function.Function;
  * GET  /api/health  -> {"status":"ok"}
  * POST /api/chat    тело: {"messages":[{"role":"user|assistant","content":"..."}, ...]}
  *                   ответ: {"answer":"..."}  или  {"error":"..."}
+ * POST /api/title   тело: {"kind":"chat|family","texts":["...", ...]}
+ *                   ответ: {"title":"..."}  — короткое название по смыслу (до 5 слов)
  * </pre>
  *
  * Фронтенд присылает ТОЛЬКО родословную ветки (путь от корня до вопроса),
@@ -50,6 +52,7 @@ public final class ApiServer {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/api/health", this::handleHealth);
         server.createContext("/api/chat", this::handleChat);
+        server.createContext("/api/title", this::handleTitle);
         server.setExecutor(Executors.newFixedThreadPool(8));
         server.start();
         return server;
@@ -123,6 +126,142 @@ public final class ApiServer {
         } finally {
             ex.close();
         }
+    }
+
+    // -------------------------------------------------------------------- title
+
+    static final int MAX_TITLE_TEXTS = 8;
+    static final int MAX_TITLE_TEXT_CHARS = 1500;
+
+    private void handleTitle(HttpExchange ex) throws IOException {
+        try {
+            if (handlePreflight(ex)) {
+                return;
+            }
+            if (!"POST".equals(ex.getRequestMethod())) {
+                sendJson(ex, 405, error("Только POST"), "POST, OPTIONS");
+                return;
+            }
+            byte[] raw = ex.getRequestBody().readNBytes(MAX_BODY_BYTES + 1);
+            if (raw.length > MAX_BODY_BYTES) {
+                sendJson(ex, 413, error("Запрос слишком большой"), null);
+                return;
+            }
+
+            String prompt;
+            try {
+                prompt = buildTitlePrompt(new String(raw, StandardCharsets.UTF_8));
+            } catch (BadRequest | Json.ParseException e) {
+                sendJson(ex, 400, error(e.getMessage()), null);
+                return;
+            }
+
+            String answer;
+            try {
+                answer = ai.apply(List.of(new Message(1, 0, "user", prompt)));
+            } catch (AiException e) {
+                System.err.println("[api] title: " + e.getMessage());
+                sendJson(ex, 502, error(e.getMessage()), null);
+                return;
+            } catch (RuntimeException e) {
+                System.err.println("[api] title: ИИ вернул ошибку: " + e);
+                sendJson(ex, 502, error("ИИ-сервис не ответил. Подробности в логе сервера."), null);
+                return;
+            }
+            String title = cleanTitle(answer);
+            if (title.isEmpty()) {
+                sendJson(ex, 502, error("ИИ не придумал название"), null);
+                return;
+            }
+            sendJson(ex, 200, "{\"title\":" + Json.quote(title) + "}", null);
+        } finally {
+            ex.close();
+        }
+    }
+
+    static String buildTitlePrompt(String body) {
+        Object root = Json.parse(body);
+        if (!(root instanceof Map<?, ?> obj)) {
+            throw new BadRequest("Ожидался JSON-объект с полями kind и texts");
+        }
+        Object kind = obj.get("kind");
+        if (!"chat".equals(kind) && !"family".equals(kind)) {
+            throw new BadRequest("kind должен быть \"chat\" или \"family\"");
+        }
+        if (!(obj.get("texts") instanceof List<?> list) || list.isEmpty() || list.size() > MAX_TITLE_TEXTS) {
+            throw new BadRequest("texts должен быть массивом из 1.." + MAX_TITLE_TEXTS + " строк");
+        }
+        List<String> texts = new ArrayList<>();
+        for (Object o : list) {
+            if (!(o instanceof String t) || t.isBlank()) {
+                throw new BadRequest("Каждый элемент texts должен быть непустой строкой");
+            }
+            texts.add(t.length() > MAX_TITLE_TEXT_CHARS ? t.substring(0, MAX_TITLE_TEXT_CHARS) : t);
+        }
+        StringBuilder sb = new StringBuilder();
+        if ("chat".equals(kind)) {
+            sb.append("""
+                    Придумай название чата по первому сообщению пользователя.
+                    Требования:
+                    - передай СМЫСЛ запроса (о чём он или чего хочет), а не копируй текст;
+                    - максимум 4 слова, лучше 2-3;
+                    - на том же языке, что и сообщение;
+                    - без кавычек, точки, эмодзи и пояснений.
+                    Верни только само название.
+
+                    Сообщение пользователя:
+                    <<<
+                    """);
+            sb.append(texts.get(0)).append("\n>>>");
+        } else {
+            sb.append("""
+                    Ниже сообщение ассистента и части, которые разошлись в отдельные ветки диалога.
+                    Придумай общее название этой группы веток по смыслу.
+                    Требования:
+                    - максимум 3 слова;
+                    - на том же языке, что и сообщение;
+                    - без кавычек, точки, эмодзи и пояснений.
+                    Верни только само название.
+
+                    Сообщение:
+                    <<<
+                    """);
+            sb.append(texts.get(0)).append("\n>>>");
+            if (texts.size() > 1) {
+                sb.append("\n\nВетки:");
+                for (int i = 1; i < texts.size(); i++) {
+                    sb.append("\n- ").append(texts.get(i).replace('\n', ' '));
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    /** Из ответа модели делает аккуратное короткое название: одна строка, без кавычек и точки, до 5 слов. */
+    static String cleanTitle(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String line = "";
+        for (String l : raw.split("\\R")) {
+            if (!l.isBlank()) {
+                line = l.strip();
+                break;
+            }
+        }
+        line = line.replaceAll("^[#*>\\-\\s\"'«»“”„`]+", "")
+                .replaceAll("[\\s\"'«»“”„`*.!,;:]+$", "")
+                .replaceAll("(?iu)^(название|title)\\s*[:\\-—]\\s*", "")
+                .replaceAll("\\s+", " ")
+                .strip();
+        String[] words = line.split(" ");
+        if (words.length > 5) {
+            line = String.join(" ", java.util.Arrays.copyOf(words, 5));
+        }
+        if (line.length() > 40) {
+            line = line.substring(0, 40).strip();
+        }
+        return line;
     }
 
     // ----------------------------------------------------------------- parsing

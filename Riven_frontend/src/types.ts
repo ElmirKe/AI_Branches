@@ -16,6 +16,11 @@ export interface ChatTree {
   title: string;
   createdAt: number;
   messages: Message[];
+  /** названия «семей» по смыслу: id родителя -> короткое название (приходит от ИИ) */
+  familyTitles?: Record<string, string>;
 }
+
+/** Как растёт дерево: слева направо или сверху вниз. */
+export type Orientation = "horizontal" | "vertical";
 
 export type Theme = "light" | "dark";

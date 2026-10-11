@@ -1,8 +1,10 @@
-import type { Message } from "../types";
+import type { Message, Orientation } from "../types";
+import { shortTitle } from "./title";
 
 export const CARD_W = 200;
 export const CARD_H = 78;
 export const X_STEP = 300; // 200 карточка + 100 промежуток
+export const Y_STEP = 170; // вертикальный режим: 78 карточка + 92 на линии и плашки
 export const V_GAP = 28; // зазор между дорожкой и ответвлениями
 export const FAMILY_GAP = 1; // тонкая линия-разделитель внутри семьи
 export const HEADER_H = 22; // плашка «Семья · …» над группой
@@ -163,16 +165,23 @@ export interface NodePos {
   familyId: string | null;
 }
 
+/**
+ * Сегмент рамки семьи. start/end — границы вдоль «поперечной» оси
+ * (по вертикали в горизонтальном режиме, по горизонтали — в вертикальном).
+ * labeled — есть ли у сегмента своя плашка «Семья · …».
+ */
 export interface FamilySegment {
-  top: number;
-  bottom: number;
+  start: number;
+  end: number;
   memberIds: string[];
+  labeled: boolean;
 }
 
 /** Семья сестёр. Если дорожка родителя проходит сквозь семью, рамка разбита на сегменты. */
 export interface FamilyBox {
   id: string;
-  x: number;
+  /** координата вдоль оси роста: X в горизонтальном режиме, Y в вертикальном */
+  along: number;
   label: string;
   segments: FamilySegment[];
 }
@@ -191,19 +200,22 @@ export interface TreeLayout {
   edges: Edge[];
   width: number;
   height: number;
+  orientation: Orientation;
 }
 
 interface Arr {
   cont: Message | null;
   forks: Message[];
-  ups: Message[]; // сверху вниз
-  downs: Message[]; // сверху вниз
-  header: number;
+  ups: Message[]; // «до» дорожки (сверху / слева)
+  downs: Message[]; // «после» дорожки (снизу / справа)
+  labelUps: boolean;
+  labelDowns: boolean;
+  header: number; // место под плашку над единым блоком (когда нет продолжения)
   total: number;
-  lane: number; // смещение верха карточки узла внутри бокса поддерева
+  lane: number; // смещение карточки узла внутри бокса поддерева (поперёк роста)
 }
 
-function edgePath(a: NodePos, b: NodePos): string {
+function edgePathH(a: NodePos, b: NodePos): string {
   const x1 = a.x + CARD_W;
   const y1 = a.y + CARD_H / 2;
   const x2 = b.x;
@@ -221,18 +233,58 @@ function edgePath(a: NodePos, b: NodePos): string {
   );
 }
 
+function edgePathV(a: NodePos, b: NodePos): string {
+  const x1 = a.x + CARD_W / 2;
+  const y1 = a.y + CARD_H;
+  const x2 = b.x + CARD_W / 2;
+  const y2 = b.y;
+  const dx = x2 - x1;
+  if (Math.abs(dx) < 0.5) return `M${x1} ${y1} L${x2} ${y2}`;
+  const my = (y1 + y2) / 2;
+  const s = dx > 0 ? 1 : -1;
+  const r = Math.min(10, Math.abs(dx) / 2, (y2 - y1) / 2);
+  const sw1 = s > 0 ? 0 : 1;
+  const sw2 = s > 0 ? 1 : 0;
+  return (
+    `M${x1} ${y1} V${my - r} A${r} ${r} 0 0 ${sw1} ${x1 + s * r} ${my}` +
+    ` H${x2 - s * r} A${r} ${r} 0 0 ${sw2} ${x2} ${my + r} V${y2}`
+  );
+}
+
 /**
- * Горизонтальная раскладка: глубина → X. Продолжение той же ветки остаётся
- * на дорожке родителя. Ответвления (другая ветка) стоят стопкой; если у узла
- * есть и продолжение, стопка делится по сторонам от дорожки: первое — вверх,
- * второе — вниз, третье — вверх…, а на следующем уровне порядок сторон
- * переворачивается. Без продолжения стопка центрируется на дорожке.
+ * Раскладка: глубина — по оси роста (X в горизонтальном режиме, Y в вертикальном).
+ * Продолжение той же ветки остаётся на дорожке родителя. Ответвления (другая ветка)
+ * стоят рядом поперёк оси роста; если у узла есть и продолжение, они делятся по
+ * сторонам от дорожки: первое — «до», второе — «после», третье — «до»…, а на
+ * следующем уровне порядок сторон переворачивается. Без продолжения группа
+ * центрируется на дорожке.
+ *
+ * Плашки «Семья · …»: одна над сплошным блоком; если дорожка делит семью на две части —
+ * у каждой части своя плашка.
+ *
+ * @param titles названия семей по смыслу (id родителя -> название); если нет — локальная выжимка
  */
-export function computeLayout(idx: TreeIndex, expanded: Set<string>): TreeLayout {
+export function computeLayout(
+  idx: TreeIndex,
+  expanded: Set<string>,
+  orientation: Orientation = "horizontal",
+  titles: Record<string, string> = {},
+): TreeLayout {
   const nodes = new Map<string, NodePos>();
   const families: FamilyBox[] = [];
   const edges: Edge[] = [];
-  if (!idx.root) return { nodes, families, edges, width: 0, height: 0 };
+  if (!idx.root) return { nodes, families, edges, width: 0, height: 0, orientation };
+
+  const horizontal = orientation === "horizontal";
+  const C = horizontal ? CARD_H : CARD_W; // размер карточки поперёк роста
+  const STEP = horizontal ? X_STEP : Y_STEP;
+  // плашка занимает место поперёк роста только в горизонтальном режиме;
+  // в вертикальном она стоит над рамкой, в промежутке между уровнями
+  const HDR = horizontal ? HEADER_H : 0;
+
+  const crossOf = (p: NodePos) => (horizontal ? p.y : p.x);
+  const mk = (depth: number, cross: number) =>
+    horizontal ? { x: PAD + depth * STEP, y: cross } : { x: cross, y: PAD + depth * STEP };
 
   const arrs = new Map<string, Arr>();
   const sum = (ms: Message[]) =>
@@ -244,34 +296,38 @@ export function computeLayout(idx: TreeIndex, expanded: Set<string>): TreeLayout
     const forks = kids.filter((k) => k !== cont);
     forks.forEach((f) => measure(f, depth + 1));
     if (cont) measure(cont, depth + 1);
-    const header = forks.length >= 2 ? HEADER_H : 0;
+    const isFamily = forks.length >= 2;
+    const header = isFamily ? HDR : 0;
 
     let arr: Arr;
     if (!cont) {
       if (forks.length === 0) {
-        arr = { cont, forks, ups: [], downs: [], header, total: CARD_H, lane: 0 };
+        arr = { cont, forks, ups: [], downs: [], labelUps: false, labelDowns: false, header, total: C, lane: 0 };
       } else {
         let y = header;
         const centers: number[] = [];
         forks.forEach((f, i) => {
           const fm = arrs.get(f.id)!;
           if (i > 0) y += FAMILY_GAP;
-          centers.push(y + fm.lane + CARD_H / 2);
+          centers.push(y + fm.lane + C / 2);
           y += fm.total;
         });
         const mid = (centers[0] + centers[centers.length - 1]) / 2;
-        arr = { cont, forks, ups: [], downs: forks, header, total: y, lane: mid - CARD_H / 2 };
+        arr = { cont, forks, ups: [], downs: forks, labelUps: false, labelDowns: isFamily, header, total: y, lane: mid - C / 2 };
       }
     } else {
       const flip = depth % 2 === 1;
       const upsNear: Message[] = [];
       const downs: Message[] = [];
       forks.forEach((f, i) => ((i % 2 === 0) !== flip ? upsNear : downs).push(f));
-      const ups = upsNear.reverse(); // ближайшая к дорожке — внизу списка
+      const ups = upsNear.reverse(); // ближайшая к дорожке — в конце списка
+      // дорожка разделила семью — у каждой части своя плашка
+      const labelUps = isFamily && ups.length > 0;
+      const labelDowns = isFamily && downs.length > 0;
       const cm = arrs.get(cont.id)!;
-      const upTotal = ups.length ? header + sum(ups) + V_GAP : 0;
-      const downTotal = downs.length ? V_GAP + (ups.length ? 0 : header) + sum(downs) : 0;
-      arr = { cont, forks, ups, downs, header, total: upTotal + cm.total + downTotal, lane: upTotal + cm.lane };
+      const upTotal = ups.length ? (labelUps ? HDR : 0) + sum(ups) + V_GAP : 0;
+      const downTotal = downs.length ? V_GAP + (labelDowns ? HDR : 0) + sum(downs) : 0;
+      arr = { cont, forks, ups, downs, labelUps, labelDowns, header, total: upTotal + cm.total + downTotal, lane: upTotal + cm.lane };
     }
     arrs.set(m.id, arr);
     return arr;
@@ -279,29 +335,30 @@ export function computeLayout(idx: TreeIndex, expanded: Set<string>): TreeLayout
 
   function place(m: Message, depth: number, top: number, parentId: string | null): void {
     const a = arrs.get(m.id)!;
-    nodes.set(m.id, { id: m.id, x: PAD + depth * X_STEP, y: top + a.lane, depth, parentId, familyId: null });
-    let y = top;
+    const { x, y } = mk(depth, top + a.lane);
+    nodes.set(m.id, { id: m.id, x, y, depth, parentId, familyId: null });
+    let cur = top;
     const placeStack = (list: Message[]) => {
       list.forEach((f, i) => {
-        if (i > 0) y += FAMILY_GAP;
-        place(f, depth + 1, y, m.id);
-        y += arrs.get(f.id)!.total;
+        if (i > 0) cur += FAMILY_GAP;
+        place(f, depth + 1, cur, m.id);
+        cur += arrs.get(f.id)!.total;
       });
     };
     if (!a.cont) {
-      y += a.header;
+      cur += a.header;
       placeStack(a.downs);
     } else {
       if (a.ups.length) {
-        y += a.header;
+        if (a.labelUps) cur += HDR;
         placeStack(a.ups);
-        y += V_GAP;
+        cur += V_GAP;
       }
-      place(a.cont, depth + 1, y, m.id);
-      y += arrs.get(a.cont.id)!.total;
+      place(a.cont, depth + 1, cur, m.id);
+      cur += arrs.get(a.cont.id)!.total;
       if (a.downs.length) {
-        y += V_GAP;
-        if (!a.ups.length) y += a.header;
+        cur += V_GAP;
+        if (a.labelDowns) cur += HDR;
         placeStack(a.downs);
       }
     }
@@ -309,19 +366,28 @@ export function computeLayout(idx: TreeIndex, expanded: Set<string>): TreeLayout
       const members = [...a.ups, ...a.downs];
       members.forEach((f) => (nodes.get(f.id)!.familyId = m.id));
       const mergedGroup = isMergeNode(m) && members.every((f) => m.parents.includes(f.id));
-      const segment = (list: Message[]): FamilySegment => {
+      const segment = (list: Message[], labeled: boolean): FamilySegment => {
         const ps = list.map((f) => nodes.get(f.id)!);
         return {
-          top: Math.min(...ps.map((p) => p.y)),
-          bottom: Math.max(...ps.map((p) => p.y + CARD_H)),
+          start: Math.min(...ps.map(crossOf)),
+          end: Math.max(...ps.map((p) => crossOf(p) + C)),
           memberIds: list.map((f) => f.id),
+          labeled,
         };
       };
+      const first = nodes.get(members[0].id)!;
+      const name = mergedGroup ? truncate(m.text || m.branch, 26) : (titles[m.id] ?? shortTitle(m.text || m.branch, 3));
+      const segs: FamilySegment[] = [];
+      if (!a.cont) segs.push(segment(a.downs, true));
+      else {
+        if (a.ups.length) segs.push(segment(a.ups, a.labelUps));
+        if (a.downs.length) segs.push(segment(a.downs, a.labelDowns));
+      }
       families.push({
         id: m.id,
-        x: nodes.get(members[0].id)!.x,
-        label: (mergedGroup ? "Слитые · " : "Семья · ") + truncate(m.text || m.branch, 26),
-        segments: [a.ups, a.downs].filter((l) => l.length > 0).map(segment),
+        along: horizontal ? first.x : first.y,
+        label: (mergedGroup ? "Слитые · " : "Семья · ") + name,
+        segments: segs,
       });
     }
   }
@@ -329,16 +395,31 @@ export function computeLayout(idx: TreeIndex, expanded: Set<string>): TreeLayout
   const rootArr = measure(idx.root, 0);
   place(idx.root, 0, PAD, null);
 
-  let maxX = 0;
+  let maxAlong = 0;
   for (const p of nodes.values()) {
-    maxX = Math.max(maxX, p.x);
+    maxAlong = Math.max(maxAlong, horizontal ? p.x : p.y);
     if (!p.parentId) continue;
     const pp = nodes.get(p.parentId)!;
     const child = idx.byId.get(p.id)!;
     const parent = idx.byId.get(p.parentId)!;
     const gold = isMergeNode(child) || (isMergeNode(parent) && parent.parents.includes(child.id));
-    edges.push({ from: p.parentId, to: p.id, gold, level: forkLevel(child.id, idx.byId), d: edgePath(pp, p) });
+    edges.push({
+      from: p.parentId,
+      to: p.id,
+      gold,
+      level: forkLevel(child.id, idx.byId),
+      d: horizontal ? edgePathH(pp, p) : edgePathV(pp, p),
+    });
   }
 
-  return { nodes, families, edges, width: maxX + CARD_W + PAD, height: rootArr.total + PAD * 2 };
+  const alongSize = maxAlong + (horizontal ? CARD_W : CARD_H) + PAD;
+  const crossSize = rootArr.total + PAD * 2;
+  return {
+    nodes,
+    families,
+    edges,
+    width: horizontal ? alongSize : crossSize,
+    height: horizontal ? crossSize : alongSize,
+    orientation,
+  };
 }
