@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from "react";
 import type { ChatTree, Message, Orientation, Theme } from "./types";
-import { detectList, fetchReply, fetchTitle, generateReply, type ChatTurn } from "./lib/api";
+import { detectList, fetchReply, fetchTitle, type ChatTurn } from "./lib/api";
 import { shortTitle } from "./lib/title";
 import {
   buildIndex,
@@ -48,38 +48,6 @@ type Action =
   | { type: "TOGGLE_EXPANDED"; id: string };
 
 const NEW_TITLE = "Новый чат";
-
-/** Демо-дерево: вопрос → план из 4 шагов, разложенный на сестёр, одна продолжена. */
-function seedTree(): ChatTree {
-  const plan = generateReply("план");
-  const items = detectList(plan);
-  const sistersMsgs: Message[] = items.map((item, i) => ({
-    id: `s${i + 1}`,
-    parents: ["r2"],
-    role: "assistant",
-    branch: truncate(item, 32),
-    text: item,
-  }));
-  const s2 = sistersMsgs[1];
-  return {
-    id: "demo",
-    title: "Запуск продукта",
-    createdAt: Date.now(),
-    messages: [
-      { id: "r1", parents: [], role: "user", branch: ROOT_BRANCH, text: "Как спланировать запуск продукта?" },
-      { id: "r2", parents: ["r1"], role: "assistant", branch: ROOT_BRANCH, text: plan },
-      ...sistersMsgs,
-      {
-        id: "u1",
-        parents: [s2.id],
-        role: "user",
-        branch: s2.branch,
-        text: "С чего начать сборку минимальной версии, если команда — два человека?",
-      },
-      { id: "a1", parents: ["u1"], role: "assistant", branch: s2.branch, text: generateReply("с чего начать") },
-    ],
-  };
-}
 
 function updateTree(state: State, treeId: string, fn: (t: ChatTree) => ChatTree): State {
   return { ...state, trees: state.trees.map((t) => (t.id === treeId ? fn(t) : t)) };
@@ -179,10 +147,11 @@ export interface Store {
 const StoreContext = createContext<Store | null>(null);
 
 function initialState(): State {
-  const demo = seedTree();
+  // приложение всегда начинается с пустого нового чата
+  const first: ChatTree = { id: uid("t"), title: NEW_TITLE, createdAt: Date.now(), messages: [] };
   return {
-    trees: [demo],
-    currentTreeId: demo.id,
+    trees: [first],
+    currentTreeId: first.id,
     selectedId: null,
     theme: "light",
     orientation: "horizontal",

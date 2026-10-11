@@ -287,8 +287,22 @@ export function computeLayout(
     horizontal ? { x: PAD + depth * STEP, y: cross } : { x: cross, y: PAD + depth * STEP };
 
   const arrs = new Map<string, Arr>();
+  // «тяжёлый» узел: его поддерево шире одной карточки (у него есть свои ответвления сверху/снизу).
+  // Рядом с таким соседом семья не склеивается: между поддеревьями — воздух, у каждой части своя рамка.
+  const heavy = (m: Message) => arrs.get(m.id)!.total > C + 0.5;
+  const SPLIT_GAP = V_GAP + HDR;
+  const gapBetween = (prev: Message, cur: Message) => (heavy(prev) || heavy(cur) ? SPLIT_GAP : FAMILY_GAP);
   const sum = (ms: Message[]) =>
-    ms.reduce((a, m) => a + arrs.get(m.id)!.total, 0) + Math.max(0, ms.length - 1) * FAMILY_GAP;
+    ms.reduce((a, m, i) => a + arrs.get(m.id)!.total + (i > 0 ? gapBetween(ms[i - 1], m) : 0), 0);
+  // разбиение стопки на группы, которые остались склеенными
+  const groupsOf = (ms: Message[]): Message[][] => {
+    const out: Message[][] = [];
+    ms.forEach((m, i) => {
+      if (i > 0 && gapBetween(ms[i - 1], m) === FAMILY_GAP) out[out.length - 1].push(m);
+      else out.push([m]);
+    });
+    return out;
+  };
 
   function measure(m: Message, depth: number): Arr {
     const kids = displayChildren(m.id, idx, expanded);
@@ -308,7 +322,7 @@ export function computeLayout(
         const centers: number[] = [];
         forks.forEach((f, i) => {
           const fm = arrs.get(f.id)!;
-          if (i > 0) y += FAMILY_GAP;
+          if (i > 0) y += gapBetween(forks[i - 1], f);
           centers.push(y + fm.lane + C / 2);
           y += fm.total;
         });
@@ -340,7 +354,7 @@ export function computeLayout(
     let cur = top;
     const placeStack = (list: Message[]) => {
       list.forEach((f, i) => {
-        if (i > 0) cur += FAMILY_GAP;
+        if (i > 0) cur += gapBetween(list[i - 1], f);
         place(f, depth + 1, cur, m.id);
         cur += arrs.get(f.id)!.total;
       });
@@ -378,10 +392,13 @@ export function computeLayout(
       const first = nodes.get(members[0].id)!;
       const name = mergedGroup ? truncate(m.text || m.branch, 26) : (titles[m.id] ?? shortTitle(m.text || m.branch, 3));
       const segs: FamilySegment[] = [];
-      if (!a.cont) segs.push(segment(a.downs, true));
+      // каждая склеенная группа — отдельная рамка со своей плашкой
+      const addSegments = (list: Message[], labeled: boolean) =>
+        groupsOf(list).forEach((g) => segs.push(segment(g, labeled)));
+      if (!a.cont) addSegments(a.downs, true);
       else {
-        if (a.ups.length) segs.push(segment(a.ups, a.labelUps));
-        if (a.downs.length) segs.push(segment(a.downs, a.labelDowns));
+        if (a.ups.length) addSegments(a.ups, a.labelUps);
+        if (a.downs.length) addSegments(a.downs, a.labelDowns);
       }
       families.push({
         id: m.id,
