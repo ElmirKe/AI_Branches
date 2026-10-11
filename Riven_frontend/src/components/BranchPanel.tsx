@@ -6,6 +6,7 @@ export function BranchPanel() {
   const { state, index, selectNode, setBranchMode, sendMessage, mergeStart } = useStore();
   const [text, setText] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const selected = state.selectedId ? index.byId.get(state.selectedId) : undefined;
   const line = selected ? lineage(selected.id, index.byId) : [];
@@ -68,9 +69,13 @@ export function BranchPanel() {
       <div className="panel-tools">
         <button
           className={"btn" + (branchOn ? " active" : "")}
-          disabled={merging || forcedBranch}
-          title={forcedBranch ? "Эта точка уже продолжена — сообщение создаст новую ветку" : undefined}
-          onClick={() => setBranchMode(!state.branchMode)}
+          disabled={merging}
+          title={forcedBranch ? "Точка уже продолжена — введите сообщение, оно откроет новую ветку" : undefined}
+          onClick={() => {
+            // у продолжённой точки любое новое сообщение и так станет веткой: просто переводим фокус в поле
+            if (forcedBranch) inputRef.current?.focus();
+            else setBranchMode(!state.branchMode);
+          }}
         >
           Ответвить
         </button>
@@ -88,6 +93,7 @@ export function BranchPanel() {
           </div>
         )}
         <textarea
+          ref={inputRef}
           value={text}
           disabled={merging}
           onChange={(e) => setText(e.target.value)}
