@@ -32,13 +32,8 @@ public class Main {
                 .filter(o -> !o.isEmpty())
                 .collect(Collectors.toCollection(HashSet::new));
 
-        // Список моделей по порядку: если первая перегружена, берётся следующая.
-        // Свой список: GEMINI_MODELS=gemini-flash-lite-latest,gemini-2.5-flash-lite
-        java.util.List<String> models = System.getenv("GEMINI_MODELS") == null
-                || System.getenv("GEMINI_MODELS").isBlank()
-                ? GeminiClient.DEFAULT_MODELS
-                : Arrays.stream(System.getenv("GEMINI_MODELS").split(","))
-                        .map(String::trim).filter(m -> !m.isEmpty()).toList();
+        // Одна быстрая модель без последовательного перебора fallback-моделей.
+        java.util.List<String> models = GeminiClient.DEFAULT_MODELS;
 
         GeminiClient ai = new GeminiClient(apiKey, models);
         new ApiServer(ai::ask, origins).start(port);

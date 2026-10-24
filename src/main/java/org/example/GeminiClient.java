@@ -17,15 +17,14 @@ import java.util.regex.Pattern;
  *
  * Зачем: у новых моделей Google часто отвечает 503 «перегружено». SDK в таком случае
  * долго повторяет запрос и «зависает». Здесь у каждой попытки свой таймаут, а при
- * перегрузке (429/5xx), 404 или сетевой ошибке берётся следующая модель из списка.
+ * временной ошибке выполняется одна повторная попытка той же быстрой модели.
  *
  * Ключ уходит только в заголовке x-goog-api-key и никогда не попадает в логи и тексты ошибок.
  */
 public final class GeminiClient {
 
     public static final String DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com";
-    public static final List<String> DEFAULT_MODELS =
-            List.of("gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite");
+    public static final List<String> DEFAULT_MODELS = List.of("gemini-3.5-flash-lite");
 
     private static final Pattern SAFE_MODEL = Pattern.compile("[A-Za-z0-9._-]{1,80}");
 
@@ -116,7 +115,7 @@ public final class GeminiClient {
                 }
             }
         }
-        System.err.println("[gemini] все модели недоступны, последняя причина: " + lastProblem);
+        System.err.println("[gemini] модель недоступна, последняя причина: " + lastProblem);
         throw new AiException("ИИ сейчас недоступен или перегружен (" + lastProblem + "). Попробуйте ещё раз через минуту.");
     }
 
@@ -144,7 +143,8 @@ public final class GeminiClient {
             sb.append("{\"role\":\"").append(turns.get(i)[0]).append("\",\"parts\":[{\"text\":")
                     .append(Json.quote(turns.get(i)[1])).append("}]}");
         }
-        return sb.append("]}").toString();
+        return sb.append("],\"generationConfig\":{\"thinkingConfig\":{\"thinkingLevel\":\"minimal\"}}}")
+                .toString();
     }
 
     /** Текст ответа или null, если его нет. Бросает AiException, если запрос заблокирован. */

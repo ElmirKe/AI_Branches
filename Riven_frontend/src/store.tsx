@@ -235,12 +235,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         pending: true,
       };
       dispatch({ type: "ADD_MESSAGES", treeId, messages: [userMsg, reply], select: reply.id, title });
-      if (title) {
-        // название чата — выжимка смысла первого сообщения (до 4 слов), а не его копия
-        fetchTitle("chat", [trimmed]).then((t) => {
-          if (t) dispatch({ type: "SET_TITLE", treeId, title: t, ifCurrent: title });
-        });
-      }
 
       // ИИ получает только путь от корня до этого вопроса — соседних веток в нём нет
       const context: ChatTurn[] = [...history, userMsg]
