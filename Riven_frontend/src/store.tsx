@@ -40,6 +40,7 @@ type Action =
   | { type: "SET_FAMILY_TITLE"; treeId: string; parentId: string; title: string }
   | { type: "SET_BRANCH_MODE"; on: boolean }
   | { type: "ADD_MESSAGES"; treeId: string; messages: Message[]; select?: string; title?: string }
+  | { type: "APPEND_PENDING"; treeId: string; id: string; text: string }
   | { type: "RESOLVE_PENDING"; treeId: string; id: string; text: string; error?: boolean }
   | { type: "MERGE_START"; id: string }
   | { type: "MERGE_TOGGLE"; id: string }
@@ -87,6 +88,13 @@ function reducer(state: State, a: Action): State {
       }));
       return { ...s, selectedId: a.select ?? s.selectedId, branchMode: false };
     }
+    case "APPEND_PENDING":
+      return updateTree(state, a.treeId, (t) => ({
+        ...t,
+        messages: t.messages.map((m) =>
+          m.id === a.id && m.pending ? { ...m, text: m.text + a.text } : m,
+        ),
+      }));
     case "RESOLVE_PENDING":
       return updateTree(state, a.treeId, (t) => ({
         ...t,
@@ -240,7 +248,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const context: ChatTurn[] = [...history, userMsg]
         .filter((m) => !m.pending && !m.error && m.text.trim() !== "")
         .map((m) => ({ role: m.role, content: m.text }));
-      fetchReply(context).then(
+      fetchReply(context, (chunk) =>
+        dispatch({ type: "APPEND_PENDING", treeId, id: reply.id, text: chunk }),
+      ).then(
         (text) => dispatch({ type: "RESOLVE_PENDING", treeId, id: reply.id, text }),
         (e: unknown) =>
           dispatch({
