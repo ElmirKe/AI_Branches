@@ -41,7 +41,8 @@ body {
 }
 
 button,
-textarea {
+textarea,
+input {
   font-family: inherit;
 }
 
@@ -199,6 +200,52 @@ textarea {
 .theme-switch button.active {
   background: var(--main-line);
   color: var(--on-accent);
+}
+
+.api-key-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.api-key-settings label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.api-key-settings input {
+  min-width: 0;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  color: var(--text-primary);
+  background: var(--bg-app);
+}
+
+.api-key-settings input:focus {
+  border-color: var(--main-line);
+}
+
+.api-key-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.api-key-actions .btn {
+  flex: 1;
+  padding: 6px;
+  font-size: 11px;
+}
+
+.api-key-settings small {
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.3;
 }
 
 /* ---------- холст ---------- */

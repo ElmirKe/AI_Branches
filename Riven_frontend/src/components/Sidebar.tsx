@@ -1,5 +1,6 @@
 import { useStore } from "../store";
 import { plural } from "../lib/layout";
+import { ApiKeySettings } from "./ApiKeySettings";
 
 export function Sidebar() {
   const { state, newTree, selectTree, setTheme } = useStore();
@@ -24,6 +25,7 @@ export function Sidebar() {
           );
         })}
       </div>
+      <ApiKeySettings />
       <div className="theme-switch" role="group" aria-label="Тема">
         <button className={state.theme === "light" ? "active" : ""} onClick={() => setTheme("light")}>
           Светлая
