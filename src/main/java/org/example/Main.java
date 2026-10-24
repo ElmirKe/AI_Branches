@@ -36,7 +36,7 @@ public class Main {
         java.util.List<String> models = GeminiClient.DEFAULT_MODELS;
 
         GeminiClient ai = new GeminiClient(apiKey, models);
-        new ApiServer(ai::ask, origins).start(port);
+        new ApiServer(ai::ask, ai::askStreaming, origins).start(port);
 
         System.out.println("AI Chat backend запущен: http://localhost:" + port + "/api/health");
         System.out.println("Модели Gemini (по очереди): " + models);

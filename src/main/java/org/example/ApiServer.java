@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -21,6 +22,7 @@ import java.util.function.Function;
  * GET  /api/health  -> {"status":"ok"}
  * POST /api/chat    тело: {"messages":[{"role":"user|assistant","content":"..."}, ...]}
  *                   ответ: {"answer":"..."}  или  {"error":"..."}
+ * POST /api/chat/stream — тот же запрос, ответ частями через SSE
  * POST /api/title   тело: {"kind":"chat|family","texts":["...", ...]}
  *                   ответ: {"title":"..."}  — короткое название по смыслу (до 5 слов)
  * </pre>
@@ -36,7 +38,13 @@ public final class ApiServer {
     static final int MAX_CONTENT_CHARS = 20_000;
 
     private final Function<List<Message>, String> ai;
+    private final StreamingAi streamingAi;
     private final Set<String> allowedOrigins;
+
+    @FunctionalInterface
+    public interface StreamingAi {
+        String apply(List<Message> history, Consumer<String> onChunk);
+    }
 
     /**
      * @param ai             функция «история -> ответ ИИ» (в проде это AIService::ask)
@@ -44,7 +52,12 @@ public final class ApiServer {
      *                       "*" разрешает всем
      */
     public ApiServer(Function<List<Message>, String> ai, Set<String> allowedOrigins) {
+        this(ai, null, allowedOrigins);
+    }
+
+    public ApiServer(Function<List<Message>, String> ai, StreamingAi streamingAi, Set<String> allowedOrigins) {
         this.ai = ai;
+        this.streamingAi = streamingAi;
         this.allowedOrigins = allowedOrigins;
     }
 
@@ -52,6 +65,7 @@ public final class ApiServer {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/api/health", this::handleHealth);
         server.createContext("/api/chat", this::handleChat);
+        server.createContext("/api/chat/stream", this::handleChatStream);
         server.createContext("/api/title", this::handleTitle);
         server.setExecutor(Executors.newFixedThreadPool(8));
         server.start();
@@ -123,6 +137,72 @@ public final class ApiServer {
             System.out.println("[api] /api/chat: " + history.size() + " сообщ., "
                     + (System.currentTimeMillis() - t0) + " мс");
             sendJson(ex, 200, "{\"answer\":" + Json.quote(answer) + "}", null);
+        } finally {
+            ex.close();
+        }
+    }
+
+    private void handleChatStream(HttpExchange ex) throws IOException {
+        try {
+            if (handlePreflight(ex)) {
+                return;
+            }
+            if (!"POST".equals(ex.getRequestMethod())) {
+                sendJson(ex, 405, error("Только POST"), "POST, OPTIONS");
+                return;
+            }
+            if (streamingAi == null) {
+                sendJson(ex, 501, error("Потоковые ответы не настроены"), null);
+                return;
+            }
+
+            byte[] raw = ex.getRequestBody().readNBytes(MAX_BODY_BYTES + 1);
+            if (raw.length > MAX_BODY_BYTES) {
+                sendJson(ex, 413, error("Запрос слишком большой"), null);
+                return;
+            }
+
+            List<Message> history;
+            try {
+                history = parseHistory(new String(raw, StandardCharsets.UTF_8));
+            } catch (BadRequest | Json.ParseException e) {
+                sendJson(ex, 400, error(e.getMessage()), null);
+                return;
+            }
+
+            addCors(ex);
+            ex.getResponseHeaders().set("Content-Type", "text/event-stream; charset=utf-8");
+            ex.getResponseHeaders().set("Cache-Control", "no-cache, no-transform");
+            ex.getResponseHeaders().set("X-Accel-Buffering", "no");
+            ex.sendResponseHeaders(200, 0);
+
+            long t0 = System.currentTimeMillis();
+            try (OutputStream os = ex.getResponseBody()) {
+                try {
+                    String answer = streamingAi.apply(history, chunk -> {
+                        try {
+                            sendSse(os, "{\"text\":" + Json.quote(chunk) + "}");
+                        } catch (IOException e) {
+                            throw new StreamWriteException(e);
+                        }
+                    });
+                    if (answer == null || answer.isBlank()) {
+                        sendSse(os, error("ИИ вернул пустой ответ"));
+                        return;
+                    }
+                    sendSse(os, "{\"done\":true}");
+                    System.out.println("[api] /api/chat/stream: " + history.size() + " сообщ., "
+                            + (System.currentTimeMillis() - t0) + " мс");
+                } catch (AiException e) {
+                    System.err.println("[api] stream ИИ: " + e.getMessage());
+                    sendSse(os, error(e.getMessage()));
+                } catch (StreamWriteException e) {
+                    System.err.println("[api] клиент закрыл stream: " + e.getCause());
+                } catch (RuntimeException e) {
+                    System.err.println("[api] stream ИИ вернул ошибку: " + e);
+                    sendSse(os, error("ИИ-сервис не ответил. Подробности в логе сервера."));
+                }
+            }
         } finally {
             ex.close();
         }
@@ -339,6 +419,17 @@ public final class ApiServer {
 
     private static String error(String message) {
         return "{\"error\":" + Json.quote(message) + "}";
+    }
+
+    private static void sendSse(OutputStream os, String json) throws IOException {
+        os.write(("data: " + json + "\n\n").getBytes(StandardCharsets.UTF_8));
+        os.flush();
+    }
+
+    private static final class StreamWriteException extends RuntimeException {
+        StreamWriteException(IOException cause) {
+            super(cause);
+        }
     }
 
     private void sendJson(HttpExchange ex, int status, String json, String allow) throws IOException {

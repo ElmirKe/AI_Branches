@@ -1,6 +1,8 @@
 package org.example;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -10,6 +12,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 /**
@@ -119,6 +122,79 @@ public final class GeminiClient {
         throw new AiException("ИИ сейчас недоступен или перегружен (" + lastProblem + "). Попробуйте ещё раз через минуту.");
     }
 
+    /** История -> поток фрагментов ответа. Возвращает полный собранный текст. */
+    public String askStreaming(List<Message> history, Consumer<String> onChunk) {
+        String model = models.get(0);
+        String body = buildRequest(history);
+        long startedAt = System.nanoTime();
+        long firstChunkAt = 0;
+
+        HttpRequest req = HttpRequest.newBuilder(
+                        URI.create(baseUrl + "/v1beta/models/" + model + ":streamGenerateContent?alt=sse"))
+                .timeout(totalTimeout)
+                .header("Content-Type", "application/json")
+                .header("Accept", "text/event-stream")
+                .header("x-goog-api-key", apiKey)
+                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+                .build();
+
+        try {
+            HttpResponse<java.io.InputStream> resp =
+                    http.send(req, HttpResponse.BodyHandlers.ofInputStream());
+            if (resp.statusCode() != 200) {
+                String detail = errorMessage(new String(resp.body().readAllBytes(), StandardCharsets.UTF_8));
+                System.err.println("[gemini] stream " + model + " -> HTTP " + resp.statusCode() + ": " + detail);
+                if (resp.statusCode() == 400 || resp.statusCode() == 401 || resp.statusCode() == 403) {
+                    throw new AiException(explainFatal(resp.statusCode(), detail));
+                }
+                throw new AiException("ИИ сейчас недоступен или перегружен. Попробуйте ещё раз через минуту.");
+            }
+
+            StringBuilder full = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(resp.body(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (!line.startsWith("data:")) {
+                        continue;
+                    }
+                    String payload = line.substring(5).stripLeading();
+                    if (payload.isEmpty() || "[DONE]".equals(payload)) {
+                        continue;
+                    }
+                    String chunk = extractChunk(payload);
+                    if (chunk != null && !chunk.isEmpty()) {
+                        if (firstChunkAt == 0) {
+                            firstChunkAt = System.nanoTime();
+                        }
+                        full.append(chunk);
+                        onChunk.accept(chunk);
+                    }
+                }
+            }
+
+            if (full.isEmpty()) {
+                throw new AiException("ИИ вернул пустой ответ.");
+            }
+            long finishedAt = System.nanoTime();
+            long firstMs = firstChunkAt == 0 ? -1 : Duration.ofNanos(firstChunkAt - startedAt).toMillis();
+            long totalMs = Duration.ofNanos(finishedAt - startedAt).toMillis();
+            System.out.println("[gemini] stream " + model + ": первый фрагмент " + firstMs
+                    + " мс, всего " + totalMs + " мс");
+            return full.toString();
+        } catch (AiException e) {
+            throw e;
+        } catch (java.net.http.HttpTimeoutException e) {
+            throw new AiException("ИИ не ответил вовремя. Попробуйте ещё раз.");
+        } catch (IOException e) {
+            System.err.println("[gemini] stream " + model + ": " + e);
+            throw new AiException("Нет связи с Google. Попробуйте ещё раз.");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AiException("Запрос прерван.");
+        }
+    }
+
     // ------------------------------------------------------------ request/response
 
     static String buildRequest(List<Message> history) {
@@ -149,6 +225,16 @@ public final class GeminiClient {
 
     /** Текст ответа или null, если его нет. Бросает AiException, если запрос заблокирован. */
     static String extractAnswer(String json) {
+        String raw = extractChunk(json);
+        if (raw == null) {
+            return null;
+        }
+        String text = raw.strip();
+        return text.isEmpty() ? null : text;
+    }
+
+    /** Фрагмент потокового ответа без trim: пробелы между SSE-частями значимы. */
+    static String extractChunk(String json) {
         Object root;
         try {
             root = Json.parse(json);
@@ -174,14 +260,13 @@ public final class GeminiClient {
                 }
             }
         }
-        String text = out.toString().strip();
-        if (text.isEmpty()) {
+        if (out.isEmpty()) {
             if ("SAFETY".equals(cand.get("finishReason")) || "PROHIBITED_CONTENT".equals(cand.get("finishReason"))) {
                 throw new AiException("Google не стал отвечать на этот запрос по правилам безопасности.");
             }
             return null;
         }
-        return text;
+        return out.toString();
     }
 
     private static String errorMessage(String json) {

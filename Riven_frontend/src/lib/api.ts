@@ -47,10 +47,12 @@ export class ReplyError extends Error {}
  * `context` — ТОЛЬКО родословная ветки (от корня до вопроса), последнее сообщение — от пользователя.
  * Бросает ReplyError с текстом, который можно показать пользователю.
  */
-export async function fetchReply(context: ChatTurn[]): Promise<string> {
+export async function fetchReply(context: ChatTurn[], onChunk: (chunk: string) => void = () => {}): Promise<string> {
   if (!usesRealBackend) {
     await new Promise((resolve) => window.setTimeout(resolve, replyDelay()));
-    return generateReply(context[context.length - 1]?.content ?? "");
+    const answer = generateReply(context[context.length - 1]?.content ?? "");
+    onChunk(answer);
+    return answer;
   }
 
   const ctrl = new AbortController();
@@ -58,7 +60,7 @@ export async function fetchReply(context: ChatTurn[]): Promise<string> {
   try {
     let res: Response;
     try {
-      res = await fetch(`${API_URL}/api/chat`, {
+      res = await fetch(`${API_URL}/api/chat/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: context }),
@@ -72,19 +74,58 @@ export async function fetchReply(context: ChatTurn[]): Promise<string> {
       );
     }
 
-    let data: { answer?: unknown; error?: unknown } | null = null;
-    try {
-      data = await res.json();
-    } catch {
-      /* тело не JSON — обработаем ниже */
-    }
     if (!res.ok) {
-      throw new ReplyError(typeof data?.error === "string" ? data.error : `Сервер ответил ошибкой ${res.status}.`);
+      let message = `Сервер ответил ошибкой ${res.status}.`;
+      try {
+        const data: { error?: unknown } = await res.json();
+        if (typeof data.error === "string") message = data.error;
+      } catch {
+        /* тело не JSON */
+      }
+      throw new ReplyError(message);
     }
-    if (typeof data?.answer !== "string" || data.answer.trim() === "") {
+    if (!res.body) {
+      throw new ReplyError("Сервер не открыл поток ответа.");
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let answer = "";
+
+    const processEvent = (event: string) => {
+      const dataLine = event.split(/\r?\n/).find((line) => line.startsWith("data:"));
+      if (!dataLine) return;
+      let data: { text?: unknown; error?: unknown };
+      try {
+        data = JSON.parse(dataLine.slice(5).trimStart()) as { text?: unknown; error?: unknown };
+      } catch {
+        throw new ReplyError("Сервер прислал повреждённый фрагмент ответа.");
+      }
+      if (typeof data.error === "string") throw new ReplyError(data.error);
+      if (typeof data.text === "string" && data.text !== "") {
+        answer += data.text;
+        onChunk(data.text);
+      }
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      let separator: number;
+      while ((separator = buffer.search(/\r?\n\r?\n/)) >= 0) {
+        const event = buffer.slice(0, separator);
+        const match = buffer.slice(separator).match(/^\r?\n\r?\n/);
+        buffer = buffer.slice(separator + (match?.[0].length ?? 2));
+        processEvent(event);
+      }
+      if (done) break;
+    }
+    if (buffer.trim()) processEvent(buffer);
+    if (answer.trim() === "") {
       throw new ReplyError("Сервер вернул пустой ответ.");
     }
-    return data.answer;
+    return answer;
   } finally {
     window.clearTimeout(timer);
   }
