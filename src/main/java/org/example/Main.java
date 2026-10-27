@@ -9,14 +9,19 @@ public class Main {
 
     public static void main(String[] args) throws Exception {
 
-        String apiKey = System.getenv("GEMINI_API_KEY");
-        if (apiKey == null || apiKey.isBlank()) {
+        // Основной вариант: любой OpenAI-совместимый провайдер (по умолчанию Groq + Qwen3).
+        // Для старого деплоя оставлен запасной путь: только GEMINI_API_KEY -> Gemini.
+        String llmKey = env("LLM_API_KEY");
+        String geminiKey = env("GEMINI_API_KEY");
+        if (llmKey == null && geminiKey == null) {
             System.err.println("""
-                    Не задан GEMINI_API_KEY.
+                    Не задан LLM_API_KEY.
                     Windows PowerShell (в том же окне, где запускаете сервер):
-                        $env:GEMINI_API_KEY="ваш_ключ"
+                        $env:LLM_API_KEY="ваш_ключ"
                     Mac/Linux:
-                        export GEMINI_API_KEY="ваш_ключ"
+                        export LLM_API_KEY="ваш_ключ"
+                    По умолчанию используется Groq (https://console.groq.com). Другой провайдер:
+                    LLM_BASE_URL и LLM_MODELS (см. RUN.md).
                     """);
             System.exit(1);
         }
@@ -32,14 +37,32 @@ public class Main {
                 .filter(o -> !o.isEmpty())
                 .collect(Collectors.toCollection(HashSet::new));
 
-        // Одна быстрая модель без последовательного перебора fallback-моделей.
-        java.util.List<String> models = GeminiClient.DEFAULT_MODELS;
-
-        GeminiClient ai = new GeminiClient(apiKey, models);
-        new ApiServer(ai::ask, ai::askStreaming, origins).start(port);
+        java.util.function.Function<java.util.List<Message>, String> ai;
+        String description;
+        if (llmKey != null) {
+            String baseUrl = env("LLM_BASE_URL") != null ? env("LLM_BASE_URL") : OpenAiClient.DEFAULT_BASE_URL;
+            java.util.List<String> models = env("LLM_MODELS") == null
+                    ? OpenAiClient.DEFAULT_MODELS
+                    : Arrays.stream(env("LLM_MODELS").split(",")).map(String::trim).filter(m -> !m.isEmpty()).toList();
+            ai = new OpenAiClient(llmKey, models, baseUrl)::ask;
+            description = "OpenAI-совместимый API " + baseUrl + ", модели по очереди: " + models;
+        } else {
+            // Список моделей по порядку: если первая перегружена, берётся следующая.
+            java.util.List<String> models = env("GEMINI_MODELS") == null
+                    ? GeminiClient.DEFAULT_MODELS
+                    : Arrays.stream(env("GEMINI_MODELS").split(",")).map(String::trim).filter(m -> !m.isEmpty()).toList();
+            ai = new GeminiClient(geminiKey, models)::ask;
+            description = "Gemini (запасной вариант), модели по очереди: " + models;
+        }
+        new ApiServer(ai, origins).start(port);
 
         System.out.println("AI Chat backend запущен: http://localhost:" + port + "/api/health");
-        System.out.println("Модели Gemini (по очереди): " + models);
+        System.out.println("ИИ: " + description);
         System.out.println("Разрешённые адреса фронтенда (CORS): " + origins);
+    }
+
+    private static String env(String name) {
+        String v = System.getenv(name);
+        return v == null || v.isBlank() ? null : v.trim();
     }
 }

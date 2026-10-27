@@ -1,7 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import type { ChatTree, Message, Orientation, Theme } from "./types";
 import { detectList, fetchReply, fetchTitle, type ChatTurn } from "./lib/api";
 import { shortTitle } from "./lib/title";
+import { loadTrees, saveChat, saveMessages } from "./lib/db";
+import { supabase } from "./lib/supabase";
 import {
   buildIndex,
   buildMergeNode,
@@ -28,9 +30,12 @@ export interface State {
   branchMode: boolean;
   merge: MergeState | null;
   expanded: string[];
+  /** чаты ещё загружаются из Supabase */
+  loading: boolean;
 }
 
 type Action =
+  | { type: "LOAD_DONE"; trees: ChatTree[] }
   | { type: "NEW_TREE" }
   | { type: "SELECT_TREE"; id: string }
   | { type: "SELECT_NODE"; id: string | null }
@@ -40,7 +45,6 @@ type Action =
   | { type: "SET_FAMILY_TITLE"; treeId: string; parentId: string; title: string }
   | { type: "SET_BRANCH_MODE"; on: boolean }
   | { type: "ADD_MESSAGES"; treeId: string; messages: Message[]; select?: string; title?: string }
-  | { type: "APPEND_PENDING"; treeId: string; id: string; text: string }
   | { type: "RESOLVE_PENDING"; treeId: string; id: string; text: string; error?: boolean }
   | { type: "MERGE_START"; id: string }
   | { type: "MERGE_TOGGLE"; id: string }
@@ -50,16 +54,35 @@ type Action =
 
 const NEW_TITLE = "Новый чат";
 
+/** Идентификатор чата — настоящий UUID, потому что таким его хранит Supabase. */
+function newChatId(): string {
+  const c = globalThis.crypto as Crypto | undefined;
+  if (c && typeof c.randomUUID === "function") return c.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    return (ch === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+/** Подпись сообщения: если она не менялась, повторно в базу его не отправляем. */
+const msgSig = (m: Message) => `${m.text}\u0000${m.branch}\u0000${m.parents.join(",")}`;
+const chatSig = (t: ChatTree) => JSON.stringify([t.title, t.familyTitles ?? {}]);
+
 function updateTree(state: State, treeId: string, fn: (t: ChatTree) => ChatTree): State {
   return { ...state, trees: state.trees.map((t) => (t.id === treeId ? fn(t) : t)) };
 }
 
 function reducer(state: State, a: Action): State {
   switch (a.type) {
+    case "LOAD_DONE": {
+      // сверху всегда пустой новый чат, ниже загруженные
+      const fresh = state.trees.filter((t) => t.messages.length === 0);
+      return { ...state, loading: false, trees: [...fresh, ...a.trees], currentTreeId: (fresh[0] ?? state.trees[0]).id };
+    }
     case "NEW_TREE": {
       const empty = state.trees.find((t) => t.messages.length === 0);
       if (empty) return { ...state, currentTreeId: empty.id, selectedId: null, merge: null, branchMode: false };
-      const t: ChatTree = { id: uid("t"), title: NEW_TITLE, createdAt: Date.now(), messages: [] };
+      const t: ChatTree = { id: newChatId(), title: NEW_TITLE, createdAt: Date.now(), messages: [] };
       return { ...state, trees: [t, ...state.trees], currentTreeId: t.id, selectedId: null, merge: null, branchMode: false };
     }
     case "SELECT_TREE":
@@ -88,13 +111,6 @@ function reducer(state: State, a: Action): State {
       }));
       return { ...s, selectedId: a.select ?? s.selectedId, branchMode: false };
     }
-    case "APPEND_PENDING":
-      return updateTree(state, a.treeId, (t) => ({
-        ...t,
-        messages: t.messages.map((m) =>
-          m.id === a.id && m.pending ? { ...m, text: m.text + a.text } : m,
-        ),
-      }));
     case "RESOLVE_PENDING":
       return updateTree(state, a.treeId, (t) => ({
         ...t,
@@ -150,13 +166,23 @@ export interface Store {
   mergeConfirm: () => void;
   mergeCancel: () => void;
   toggleExpanded: (id: string) => void;
+  /** вошедший пользователь (null — сайт без Supabase) */
+  user: AuthUser | null;
+  signOut: () => void;
+  /** состояние сохранения в Supabase */
+  syncStatus: "idle" | "saving" | "error";
+}
+
+export interface AuthUser {
+  id: string;
+  email: string;
 }
 
 const StoreContext = createContext<Store | null>(null);
 
-function initialState(): State {
+function initialState(user: AuthUser | null): State {
   // приложение всегда начинается с пустого нового чата
-  const first: ChatTree = { id: uid("t"), title: NEW_TITLE, createdAt: Date.now(), messages: [] };
+  const first: ChatTree = { id: newChatId(), title: NEW_TITLE, createdAt: Date.now(), messages: [] };
   return {
     trees: [first],
     currentTreeId: first.id,
@@ -166,11 +192,93 @@ function initialState(): State {
     branchMode: false,
     merge: null,
     expanded: [],
+    loading: user !== null,
   };
 }
 
-export function StoreProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, undefined, initialState);
+export function StoreProvider({ children, user = null }: { children: ReactNode; user?: AuthUser | null }) {
+  const [state, dispatch] = useReducer(reducer, user, initialState);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "error">("idle");
+  const [retryTick, setRetryTick] = useState(0);
+  const synced = useRef(new Map<string, string>()); // что уже лежит в базе
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const inFlight = useRef(0);
+
+  // загрузка чатов пользователя при входе
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    loadTrees().then(
+      (trees) => {
+        if (!alive) return;
+        const loaded = trees.map((t) => ({
+          ...t,
+          // сообщения об ошибке ИИ хранятся с префиксом «⚠ » — возвращаем им флаг, чтобы они не попадали в контекст
+          messages: t.messages.map((m) => (m.role === "assistant" && m.text.startsWith("⚠ ") ? { ...m, error: true } : m)),
+        }));
+        for (const t of loaded) {
+          synced.current.set(`c:${t.id}`, chatSig(t));
+          synced.current.set(`ok:${t.id}`, "1");
+          for (const m of t.messages) synced.current.set(`m:${t.id}:${m.id}`, msgSig(m));
+        }
+        dispatch({ type: "LOAD_DONE", trees: loaded });
+      },
+      () => {
+        if (!alive) return;
+        setSyncStatus("error");
+        dispatch({ type: "LOAD_DONE", trees: [] });
+      },
+    );
+    return () => {
+      alive = false;
+    };
+  }, [user]);
+
+  // автосохранение: в базу уходит только то, что изменилось (ответ ИИ — когда он дописан)
+  useEffect(() => {
+    if (!user || state.loading) return;
+    const jobs: Array<{ tree: ChatTree; chat: boolean; msgs: Message[] }> = [];
+    for (const tree of state.trees) {
+      if (tree.messages.length === 0) continue;
+      const chat = synced.current.get(`c:${tree.id}`) !== chatSig(tree);
+      const msgs = tree.messages.filter((m) => !m.pending && synced.current.get(`m:${tree.id}:${m.id}`) !== msgSig(m));
+      if (chat || msgs.length > 0) jobs.push({ tree, chat, msgs });
+    }
+    if (jobs.length === 0) return;
+    for (const j of jobs) {
+      if (j.chat) synced.current.set(`c:${j.tree.id}`, chatSig(j.tree));
+      for (const m of j.msgs) synced.current.set(`m:${j.tree.id}:${m.id}`, msgSig(m));
+    }
+    inFlight.current += 1;
+    setSyncStatus("saving");
+    queue.current = queue.current.then(async () => {
+      try {
+        for (const j of jobs) {
+          if (j.chat || !synced.current.has(`ok:${j.tree.id}`)) await saveChat(j.tree);
+          synced.current.set(`ok:${j.tree.id}`, "1");
+          await saveMessages(j.tree.id, j.msgs);
+        }
+        inFlight.current -= 1;
+        if (inFlight.current === 0) setSyncStatus((s) => (s === "saving" ? "idle" : s));
+      } catch (e) {
+        console.error("[supabase] не удалось сохранить:", e);
+        // снимаем отметки, чтобы повторить попытку
+        for (const j of jobs) {
+          synced.current.delete(`c:${j.tree.id}`);
+          for (const m of j.msgs) synced.current.delete(`m:${j.tree.id}:${m.id}`);
+        }
+        inFlight.current -= 1;
+        setSyncStatus("error");
+      }
+    });
+  }, [state.trees, state.loading, user, retryTick]);
+
+  // при ошибке сохранения пробуем снова через несколько секунд
+  useEffect(() => {
+    if (syncStatus !== "error" || !user) return;
+    const t = setTimeout(() => setRetryTick((n) => n + 1), 5000);
+    return () => clearTimeout(t);
+  }, [syncStatus, user]);
 
   const currentTree = state.trees.find((t) => t.id === state.currentTreeId) ?? state.trees[0];
   const index = useMemo(() => buildIndex(currentTree.messages), [currentTree.messages]);
@@ -243,14 +351,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         pending: true,
       };
       dispatch({ type: "ADD_MESSAGES", treeId, messages: [userMsg, reply], select: reply.id, title });
+      if (title) {
+        // название чата — выжимка смысла первого сообщения (до 4 слов), а не его копия
+        fetchTitle("chat", [trimmed]).then((t) => {
+          if (t) dispatch({ type: "SET_TITLE", treeId, title: t, ifCurrent: title });
+        });
+      }
 
       // ИИ получает только путь от корня до этого вопроса — соседних веток в нём нет
       const context: ChatTurn[] = [...history, userMsg]
         .filter((m) => !m.pending && !m.error && m.text.trim() !== "")
         .map((m) => ({ role: m.role, content: m.text }));
-      fetchReply(context, (chunk) =>
-        dispatch({ type: "APPEND_PENDING", treeId, id: reply.id, text: chunk }),
-      ).then(
+      fetchReply(context).then(
         (text) => dispatch({ type: "RESOLVE_PENDING", treeId, id: reply.id, text }),
         (e: unknown) =>
           dispatch({
@@ -302,6 +414,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     mergeConfirm: () => dispatch({ type: "MERGE_CONFIRM" }),
     mergeCancel: () => dispatch({ type: "MERGE_CANCEL" }),
     toggleExpanded: (id) => dispatch({ type: "TOGGLE_EXPANDED", id }),
+    user,
+    signOut: () => {
+      void supabase?.auth.signOut();
+    },
+    syncStatus,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

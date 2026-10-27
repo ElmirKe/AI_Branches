@@ -1,148 +1,127 @@
-// ---------- прямое подключение к Gemini из браузера ----------
+const DEFAULT_REPLY =
+  "Начните с трёх вещей: кто ваш первый пользователь, какую единственную проблему вы решаете, и как вы поймёте, что решение сработало.";
 
-/** Одно сообщение родословной в формате приложения. */
+const PLAN_REPLY = [
+  "Вот план из четырёх шагов:",
+  "1. Определить проблему и аудиторию",
+  "2. Собрать минимальную версию продукта",
+  "3. Найти первых пользователей",
+  "4. Собрать обратную связь и решить, что дальше",
+].join("\n");
+
+const PLAN_WORDS = ["план", "шаги", "этапы", "варианты", "разбей"];
+
+/** Заглушка ИИ: один и тот же ответ, кроме просьб о плане/шагах. */
+export function generateReply(userText: string): string {
+  const t = userText.toLowerCase();
+  return PLAN_WORDS.some((w) => t.includes(w)) ? PLAN_REPLY : DEFAULT_REPLY;
+}
+
+/** Имитация сетевой задержки 500–1000 мс. */
+export function replyDelay(): number {
+  return 500 + Math.random() * 500;
+}
+
+// ---------- связь с backend ----------
+
+/** Одно сообщение родословной в том виде, в каком его ждёт сервер. */
 export interface ChatTurn {
   role: "user" | "assistant";
   content: string;
 }
 
-const GEMINI_MODEL = "gemini-3.5-flash-lite";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse`;
-const KEY_STORAGE = "riven.gemini-api-key";
+/**
+ * Адрес backend. Задаётся в Riven_frontend/.env.local: VITE_API_URL=http://localhost:8080
+ * Если не задан — работает заглушка выше (удобно для демо без сервера).
+ */
+const API_URL = (import.meta.env.VITE_API_URL ?? "").trim().replace(/\/+$/, "");
+
 const REQUEST_TIMEOUT_MS = 60_000;
+
+export const usesRealBackend = API_URL !== "";
 
 export class ReplyError extends Error {}
 
-export function getGeminiApiKey(): string {
-  try {
-    return window.sessionStorage.getItem(KEY_STORAGE)?.trim() ?? "";
-  } catch {
-    return "";
-  }
-}
-
-export function saveGeminiApiKey(value: string): void {
-  const key = value.trim();
-  try {
-    if (key) window.sessionStorage.setItem(KEY_STORAGE, key);
-    else window.sessionStorage.removeItem(KEY_STORAGE);
-  } catch {
-    throw new ReplyError("Браузер не разрешил сохранить ключ в этой вкладке.");
-  }
-}
-
-interface GeminiChunk {
-  candidates?: Array<{
-    content?: { parts?: Array<{ text?: unknown }> };
-  }>;
-  error?: { message?: unknown };
-}
-
-function chunkText(chunk: GeminiChunk): string {
-  return (chunk.candidates ?? [])
-    .flatMap((candidate) => candidate.content?.parts ?? [])
-    .map((part) => (typeof part.text === "string" ? part.text : ""))
-    .join("");
-}
-
-function friendlyGeminiError(status: number): string {
-  if (status === 400 || status === 401 || status === 403) {
-    return "Gemini не принял API-ключ. Проверьте его в настройках слева.";
-  }
-  if (status === 429) return "Лимит Gemini исчерпан. Подождите и попробуйте снова.";
-  return `Gemini ответил ошибкой ${status}.`;
-}
-
 /**
- * Получить streaming-ответ напрямую от Gemini. Ключ берётся из sessionStorage и
- * отправляется только Google; GitHub Pages его не получает и не хранит.
+ * Получить ответ ИИ на последнее сообщение.
+ * `context` — ТОЛЬКО родословная ветки (от корня до вопроса), последнее сообщение — от пользователя.
+ * Бросает ReplyError с текстом, который можно показать пользователю.
  */
-export async function fetchReply(context: ChatTurn[], onChunk: (chunk: string) => void = () => {}): Promise<string> {
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) throw new ReplyError("Добавьте API-ключ Gemini в настройках слева.");
+export async function fetchReply(context: ChatTurn[]): Promise<string> {
+  if (!usesRealBackend) {
+    await new Promise((resolve) => window.setTimeout(resolve, replyDelay()));
+    return generateReply(context[context.length - 1]?.content ?? "");
+  }
 
   const ctrl = new AbortController();
   const timer = window.setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
   try {
     let res: Response;
     try {
-      res = await fetch(GEMINI_URL, {
+      res = await fetch(`${API_URL}/api/chat`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          contents: context.map((turn) => ({
-            role: turn.role === "assistant" ? "model" : "user",
-            parts: [{ text: turn.content }],
-          })),
-          generationConfig: {
-            thinkingConfig: { thinkingLevel: "minimal" },
-          },
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: context }),
         signal: ctrl.signal,
       });
     } catch {
-      throw new ReplyError(ctrl.signal.aborted ? "Gemini не ответил за 60 секунд." : "Не удалось связаться с Gemini.");
+      throw new ReplyError(
+        ctrl.signal.aborted
+          ? "Сервер не ответил за 60 секунд."
+          : `Не удалось связаться с сервером (${API_URL}). Он запущен? Адрес сайта указан в ALLOWED_ORIGINS?`,
+      );
     }
 
-    if (!res.ok) throw new ReplyError(friendlyGeminiError(res.status));
-    if (!res.body) throw new ReplyError("Gemini не открыл поток ответа.");
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let answer = "";
-
-    const processEvent = (event: string) => {
-      const dataLine = event.split(/\r?\n/).find((line) => line.startsWith("data:"));
-      if (!dataLine) return;
-      let data: GeminiChunk;
-      try {
-        data = JSON.parse(dataLine.slice(5).trimStart()) as GeminiChunk;
-      } catch {
-        throw new ReplyError("Gemini прислал повреждённый фрагмент ответа.");
-      }
-      if (data.error) {
-        throw new ReplyError(typeof data.error.message === "string" ? data.error.message : "Ошибка Gemini.");
-      }
-      const text = chunkText(data);
-      if (text) {
-        answer += text;
-        onChunk(text);
-      }
-    };
-
-    while (true) {
-      const { value, done } = await reader.read();
-      buffer += decoder.decode(value, { stream: !done });
-      let separator: number;
-      while ((separator = buffer.search(/\r?\n\r?\n/)) >= 0) {
-        const event = buffer.slice(0, separator);
-        const match = buffer.slice(separator).match(/^\r?\n\r?\n/);
-        buffer = buffer.slice(separator + (match?.[0].length ?? 2));
-        processEvent(event);
-      }
-      if (done) break;
+    let data: { answer?: unknown; error?: unknown } | null = null;
+    try {
+      data = await res.json();
+    } catch {
+      /* тело не JSON — обработаем ниже */
     }
-    if (buffer.trim()) processEvent(buffer);
-    if (!answer.trim()) throw new ReplyError("Gemini вернул пустой ответ.");
-    return answer;
+    if (!res.ok) {
+      throw new ReplyError(typeof data?.error === "string" ? data.error : `Сервер ответил ошибкой ${res.status}.`);
+    }
+    if (typeof data?.answer !== "string" || data.answer.trim() === "") {
+      throw new ReplyError("Сервер вернул пустой ответ.");
+    }
+    return data.answer;
   } finally {
     window.clearTimeout(timer);
   }
 }
 
-/** Названия остаются локальными: отдельный AI-запрос больше не нужен. */
-export async function fetchTitle(_kind: "chat" | "family", _texts: string[]): Promise<string | null> {
-  return null;
+/**
+ * Короткое название по смыслу (чат — до 4 слов, семья — до 3).
+ * Возвращает null, если сервера нет или он не ответил — тогда остаётся локальная выжимка.
+ */
+export async function fetchTitle(kind: "chat" | "family", texts: string[]): Promise<string | null> {
+  if (!usesRealBackend || texts.length === 0) return null;
+  const ctrl = new AbortController();
+  const timer = window.setTimeout(() => ctrl.abort(), 45_000);
+  try {
+    const res = await fetch(`${API_URL}/api/title`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind, texts }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return null;
+    const data: { title?: unknown } = await res.json();
+    return typeof data.title === "string" && data.title.trim() ? data.title.trim().slice(0, 60) : null;
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 const ITEM_RE =/^\s*(\d+[.)]|[-–—•*]\s)/;
 const STRIP_RE = /^\s*(\d+[.)]\s*|[-–—•*]\s+)/;
 
-/** Возвращает пункты списка, если в тексте есть 2+ строки-пункта подряд. */
+/**
+ * Возвращает пункты списка, если в тексте есть 2+ строки-пункта подряд
+ * (пустые строки между ними допустимы). Иначе — пустой массив.
+ */
 export function detectList(text: string): string[] {
   let best: string[] = [];
   let run: string[] = [];

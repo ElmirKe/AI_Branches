@@ -1,9 +1,8 @@
 import { useStore } from "../store";
 import { plural } from "../lib/layout";
-import { ApiKeySettings } from "./ApiKeySettings";
 
 export function Sidebar() {
-  const { state, newTree, selectTree, setTheme } = useStore();
+  const { state, newTree, selectTree, setTheme, user, signOut, syncStatus } = useStore();
   return (
     <aside className="sidebar">
       <div className="brand">Riven</div>
@@ -25,7 +24,19 @@ export function Sidebar() {
           );
         })}
       </div>
-      <ApiKeySettings />
+      {user && (
+        <div className="account">
+          <span className="account-email" title={user.email}>
+            {user.email}
+          </span>
+          <span className={"sync sync-" + syncStatus}>
+            {syncStatus === "saving" ? "Сохраняем…" : syncStatus === "error" ? "Не удалось сохранить, повторяем…" : "Сохранено"}
+          </span>
+          <button className="auth-switch" onClick={signOut}>
+            Выйти
+          </button>
+        </div>
+      )}
       <div className="theme-switch" role="group" aria-label="Тема">
         <button className={state.theme === "light" ? "active" : ""} onClick={() => setTheme("light")}>
           Светлая

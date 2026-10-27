@@ -7,6 +7,7 @@ import { BranchPanel } from "./components/BranchPanel";
 export default function App() {
   const { state, currentTree } = useStore();
   const empty = currentTree.messages.length === 0;
+  if (state.loading) return <div className={`splash theme-${state.theme}`}>Загружаем ваши чаты…</div>;
   return (
     <div className={`app theme-${state.theme}`}>
       <Sidebar />
