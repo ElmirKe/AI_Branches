@@ -4,12 +4,15 @@ import { CARD_H, CARD_W, computeLayout } from "../lib/layout";
 import { NodeCard } from "./NodeCard";
 import { FamilyGroup } from "./FamilyGroup";
 import { MergeMode } from "./MergeMode";
+import { displayTitle, useLang, useT } from "../lib/i18n";
 
 const WIDTHS = [3, 1.8, 1.2];
 
 export function TreeCanvas() {
   const { state, currentTree, index, expandedSet, mergeCandidates, selectNode, setOrientation } = useStore();
   const orientation = state.orientation;
+  const t = useT();
+  const lang = useLang();
   const layout = useMemo(
     () => computeLayout(index, expandedSet, orientation, currentTree.familyTitles),
     [index, expandedSet, orientation, currentTree.familyTitles],
@@ -55,30 +58,30 @@ export function TreeCanvas() {
     <div className="canvas">
       <header className="canvas-head">
         <div className="canvas-head-row">
-          <h1>{currentTree.title}</h1>
-          <div className="orient-switch" role="group" aria-label="Направление дерева">
+          <h1>{displayTitle(currentTree.title, lang)}</h1>
+          <div className="orient-switch" role="group" aria-label={t.treeDirection}>
             <button
               className={orientation === "horizontal" ? "active" : ""}
               aria-pressed={orientation === "horizontal"}
               onClick={() => setOrientation("horizontal")}
-              title="Дерево растёт слева направо"
+              title={t.horizontalHint}
             >
-              ↔ Горизонтально
+              ↔ {t.horizontal}
             </button>
             <button
               className={orientation === "vertical" ? "active" : ""}
               aria-pressed={orientation === "vertical"}
               onClick={() => setOrientation("vertical")}
-              title="Дерево растёт сверху вниз"
+              title={t.verticalHint}
             >
-              ↕ Вертикально
+              ↕ {t.vertical}
             </button>
           </div>
         </div>
         {merging ? (
           <MergeMode />
         ) : (
-          <p>Кликните карточку, чтобы открыть ветку. Модель видит только путь от корня до неё.</p>
+          <p>{t.canvasHint}</p>
         )}
       </header>
       <div className="canvas-scroll" ref={scrollRef} onClick={onBackground}>

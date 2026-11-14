@@ -1,3 +1,5 @@
+import { getLang, tr } from "./i18n";
+
 const DEFAULT_REPLY =
   "Начните с трёх вещей: кто ваш первый пользователь, какую единственную проблему вы решаете, и как вы поймёте, что решение сработало.";
 
@@ -61,14 +63,14 @@ export async function fetchReply(context: ChatTurn[]): Promise<string> {
       res = await fetch(`${API_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: context }),
+        body: JSON.stringify({ messages: context, lang: getLang() }),
         signal: ctrl.signal,
       });
     } catch {
       throw new ReplyError(
         ctrl.signal.aborted
-          ? "Сервер не ответил за 60 секунд."
-          : `Не удалось связаться с сервером (${API_URL}). Он запущен? Адрес сайта указан в ALLOWED_ORIGINS?`,
+          ? tr().errTimeout
+          : tr().errConnect(API_URL),
       );
     }
 
@@ -79,10 +81,10 @@ export async function fetchReply(context: ChatTurn[]): Promise<string> {
       /* тело не JSON — обработаем ниже */
     }
     if (!res.ok) {
-      throw new ReplyError(typeof data?.error === "string" ? data.error : `Сервер ответил ошибкой ${res.status}.`);
+      throw new ReplyError(typeof data?.error === "string" ? data.error : tr().errStatus(res.status));
     }
     if (typeof data?.answer !== "string" || data.answer.trim() === "") {
-      throw new ReplyError("Сервер вернул пустой ответ.");
+      throw new ReplyError(tr().errEmpty);
     }
     return data.answer;
   } finally {
@@ -102,7 +104,7 @@ export async function fetchTitle(kind: "chat" | "family", texts: string[]): Prom
     const res = await fetch(`${API_URL}/api/title`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind, texts }),
+      body: JSON.stringify({ kind, texts, lang: getLang() }),
       signal: ctrl.signal,
     });
     if (!res.ok) return null;

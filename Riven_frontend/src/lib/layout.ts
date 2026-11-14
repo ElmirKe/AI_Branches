@@ -1,3 +1,4 @@
+import { tr } from "./i18n";
 import type { Message, Orientation } from "../types";
 import { shortTitle } from "./title";
 
@@ -143,13 +144,13 @@ export function buildMergeNode(messages: Message[], ids: string[]): Message {
   const members = ids.map((i) => idx.byId.get(i)).filter((m): m is Message => !!m);
   const leaves = members.flatMap((m) => leafBranchNames(m, idx.byId));
   const text =
-    `Свод веток: ${leaves.join(", ")}.\n\n` +
+    tr().mergeText(leaves.join(", ")) + "\n\n" +
     members.map((m) => `${m.branch} — ${branchSummary(m, idx)}`).join("\n\n");
   return {
     id: uid("merge"),
     parents: members.map((m) => m.id),
     role: "assistant",
-    branch: truncate("Свод: " + leaves.join(" + "), 40),
+    branch: truncate(tr().mergeBranch + ": " + leaves.join(" + "), 40),
     text,
   };
 }
@@ -182,7 +183,9 @@ export interface FamilyBox {
   id: string;
   /** координата вдоль оси роста: X в горизонтальном режиме, Y в вертикальном */
   along: number;
+  /** имя семьи; приставку «Семья · / Слитые ·» добавляет интерфейс на текущем языке */
   label: string;
+  merged: boolean;
   segments: FamilySegment[];
 }
 
@@ -403,7 +406,8 @@ export function computeLayout(
       families.push({
         id: m.id,
         along: horizontal ? first.x : first.y,
-        label: (mergedGroup ? "Слитые · " : "Семья · ") + name,
+        label: name,
+        merged: mergedGroup,
         segments: segs,
       });
     }

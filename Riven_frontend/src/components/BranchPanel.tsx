@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useStore } from "../store";
-import { isMergeNode, lineage, plural, sisters } from "../lib/layout";
+import { isMergeNode, lineage, sisters } from "../lib/layout";
+import { displayBranch, useLang, useT } from "../lib/i18n";
 import { Markdown } from "./Markdown";
 
 export function BranchPanel() {
   const { state, index, selectNode, setBranchMode, sendMessage, mergeStart } = useStore();
   const [text, setText] = useState("");
+  const t = useT();
+  const lang = useLang();
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -46,8 +49,8 @@ export function BranchPanel() {
   return (
     <aside className="panel">
       <div className="panel-head">
-        <h2 title={selected.branch}>{selected.branch}</h2>
-        <button className="icon-btn" aria-label="Закрыть" onClick={() => selectNode(null)}>
+        <h2 title={displayBranch(selected.branch, lang)}>{displayBranch(selected.branch, lang)}</h2>
+        <button className="icon-btn" aria-label={t.close} onClick={() => selectNode(null)}>
           ×
         </button>
       </div>
@@ -57,13 +60,13 @@ export function BranchPanel() {
           const merge = isMergeNode(m);
           return (
             <div key={m.id} className={"msg" + (merge ? " merge" : "")}>
-              <span className="caption">{merge ? "Слияние" : m.role === "user" ? "Вы" : "Ассистент"}</span>
-              <div className="msg-text">{m.pending ? <span className="pending">Печатает…</span> : m.role === "assistant" ? <Markdown text={m.text} /> : <span className="plain">{m.text}</span>}</div>
+              <span className="caption">{merge ? t.merge : m.role === "user" ? t.you : t.assistant}</span>
+              <div className="msg-text">{m.pending ? <span className="pending">{t.typing}</span> : m.role === "assistant" ? <Markdown text={m.text} /> : <span className="plain">{m.text}</span>}</div>
             </div>
           );
         })}
         <div className="caption panel-hint">
-          Модель видит только эту линию — {n} {plural(n, "сообщение", "сообщения", "сообщений")} от начала.
+          {t.modelSees(n)}
         </div>
       </div>
 
@@ -71,18 +74,18 @@ export function BranchPanel() {
         <button
           className={"btn" + (branchOn ? " active" : "")}
           disabled={merging}
-          title={forcedBranch ? "Точка уже продолжена — введите сообщение, оно откроет новую ветку" : undefined}
+          title={forcedBranch ? t.forcedTitle : undefined}
           onClick={() => {
             // у продолжённой точки любое новое сообщение и так станет веткой: просто переводим фокус в поле
             if (forcedBranch) inputRef.current?.focus();
             else setBranchMode(!state.branchMode);
           }}
         >
-          Ответвить
+          {t.branch}
         </button>
         {sis.length > 0 && !consumed && (
           <button className="btn" disabled={merging} onClick={() => mergeStart(selected.id)}>
-            Свести
+            {t.combine}
           </button>
         )}
       </div>
@@ -90,7 +93,7 @@ export function BranchPanel() {
       <div className="composer">
         {branchOn && (
           <div className="caption composer-note">
-            {forcedBranch ? "Точка уже продолжена — сообщение откроет новую ветку" : "Новая ветка от этого узла"}
+            {forcedBranch ? t.forcedNote : t.newBranchNote}
           </div>
         )}
         <textarea
@@ -99,11 +102,11 @@ export function BranchPanel() {
           disabled={merging}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={branchOn ? "Сообщение новой ветки…" : "Продолжить ветку… (Enter — отправить, Shift+Enter — перенос)"}
+          placeholder={branchOn ? t.branchPlaceholder : t.continuePlaceholder}
         />
         <div className="composer-actions">
           <button className="btn btn-primary" disabled={!canSend} onClick={submit}>
-            {branchOn ? "Ответвить" : "Отправить"}
+            {branchOn ? t.branch : t.send}
           </button>
         </div>
       </div>

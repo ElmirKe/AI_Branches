@@ -4,6 +4,7 @@ import { detectList, fetchReply, fetchTitle, type ChatTurn } from "./lib/api";
 import { shortTitle } from "./lib/title";
 import { loadTrees, saveChat, saveMessages } from "./lib/db";
 import { supabase } from "./lib/supabase";
+import { tr } from "./lib/i18n";
 import {
   buildIndex,
   buildMergeNode,
@@ -54,6 +55,24 @@ type Action =
 
 const NEW_TITLE = "Новый чат";
 
+/** Настройки вида запоминаются в этом браузере. */
+function loadPref<T extends string>(key: string, allowed: T[], fallback: T): T {
+  try {
+    const v = localStorage.getItem(key);
+    if (v && (allowed as string[]).includes(v)) return v as T;
+  } catch {
+    /* хранилище недоступно */
+  }
+  return fallback;
+}
+function savePref(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* не запомнится, но работать будет */
+  }
+}
+
 /** Идентификатор чата — настоящий UUID, потому что таким его хранит Supabase. */
 function newChatId(): string {
   const c = globalThis.crypto as Crypto | undefined;
@@ -90,8 +109,10 @@ function reducer(state: State, a: Action): State {
     case "SELECT_NODE":
       return { ...state, selectedId: a.id, branchMode: false };
     case "SET_THEME":
+      savePref("riven.theme", a.theme);
       return { ...state, theme: a.theme };
     case "SET_ORIENTATION":
+      savePref("riven.orientation", a.orientation);
       return { ...state, orientation: a.orientation };
     case "SET_TITLE":
       // название по смыслу заменяет локальную выжимку, только если её не успели изменить
@@ -187,8 +208,8 @@ function initialState(user: AuthUser | null): State {
     trees: [first],
     currentTreeId: first.id,
     selectedId: null,
-    theme: "light",
-    orientation: "horizontal",
+    theme: loadPref("riven.theme", ["light", "dark"], "light"),
+    orientation: loadPref("riven.orientation", ["horizontal", "vertical"], "horizontal"),
     branchMode: false,
     merge: null,
     expanded: [],
@@ -369,7 +390,7 @@ export function StoreProvider({ children, user = null }: { children: ReactNode; 
             type: "RESOLVE_PENDING",
             treeId,
             id: reply.id,
-            text: "⚠ " + (e instanceof Error && e.message ? e.message : "Не удалось получить ответ."),
+            text: "⚠ " + (e instanceof Error && e.message ? e.message : tr().errReply),
             error: true,
           }),
       );

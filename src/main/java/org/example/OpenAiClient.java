@@ -163,17 +163,41 @@ public final class OpenAiClient {
 
     /** Инструкция для модели: язык, формат записи и честность про отсутствие интернета. */
     static final String SYSTEM_PROMPT =
-            "Отвечай на языке пользователя, по умолчанию на русском. Отвечай кратко и по делу. "
+            "Отвечай кратко и по делу. "
             + "Оформляй ответ в Markdown: списки, **жирный** текст, заголовки только при необходимости. "
             + "Все формулы и математические символы записывай в LaTeX: короткие в одинарных долларах ($x^2$), "
             + "крупные отдельной строкой в двойных ($$\\frac{a}{b}$$). Не используй \\( \\) и \\[ \\]. "
             + "У тебя нет доступа к интернету: не выдумывай новости и свежие данные, прямо скажи, "
             + "что не знаешь актуальной информации.";
 
+    /**
+     * Правило языка по настройке сайта. ИИ отвечает на выбранном языке, даже если пользователь
+     * пишет на другом, и переходит на другой язык, только когда пользователь сам об этом попросит.
+     */
+    static String languageRule(String lang) {
+        if ("en".equals(lang)) {
+            return "Language rule: the user's interface language is English. Always reply in English, "
+                    + "even if the user writes in another language. Switch to a different language only when "
+                    + "the user explicitly asks you to (for example \"answer in Russian\"), and then keep using "
+                    + "that language until the user asks for another one.";
+        }
+        return "Правило языка: язык интерфейса пользователя русский. Всегда отвечай по-русски, даже если "
+                + "пользователь пишет на другом языке. Переходи на другой язык, только когда пользователь сам "
+                + "прямо об этом попросит (например, «ответь на английском»), и дальше продолжай на этом языке, "
+                + "пока он не попросит другой.";
+    }
+
     static String buildRequest(String model, List<Message> history, boolean withReasoning) {
         // Склеиваем подряд идущие реплики одной роли и начинаем с user: так принимают все провайдеры.
         List<String[]> turns = new ArrayList<>();
+        StringBuilder system = new StringBuilder(SYSTEM_PROMPT);
+        boolean hasLanguageRule = false;
         for (Message m : history) {
+            if ("system".equals(m.getRole())) {
+                system.append(' ').append(m.getContent());
+                hasLanguageRule = true;
+                continue;
+            }
             String role = "assistant".equals(m.getRole()) ? "assistant" : "user";
             if (turns.isEmpty() && role.equals("assistant")) {
                 continue;
@@ -185,7 +209,10 @@ public final class OpenAiClient {
             }
         }
         StringBuilder sb = new StringBuilder("{\"model\":").append(Json.quote(model)).append(",\"messages\":[");
-        sb.append("{\"role\":\"system\",\"content\":").append(Json.quote(SYSTEM_PROMPT)).append('}');
+        if (!hasLanguageRule) {
+            system.append(' ').append(languageRule(null));
+        }
+        sb.append("{\"role\":\"system\",\"content\":").append(Json.quote(system.toString())).append('}');
         for (int i = 0; i < turns.size(); i++) {
             sb.append(',');
             sb.append("{\"role\":\"").append(turns.get(i)[0]).append("\",\"content\":")

@@ -95,7 +95,10 @@ public final class ApiServer {
 
             List<Message> history;
             try {
-                history = parseHistory(new String(raw, StandardCharsets.UTF_8));
+                String body = new String(raw, StandardCharsets.UTF_8);
+                history = parseHistory(body);
+                // правило языка идёт первым, как системная инструкция
+                history.add(0, new Message(0, 0, "system", OpenAiClient.languageRule(parseLang(body))));
             } catch (BadRequest | Json.ParseException e) {
                 sendJson(ex, 400, error(e.getMessage()), null);
                 return;
@@ -198,6 +201,9 @@ public final class ApiServer {
             }
             texts.add(t.length() > MAX_TITLE_TEXT_CHARS ? t.substring(0, MAX_TITLE_TEXT_CHARS) : t);
         }
+        String langLine = "en".equals(parseLangValue(obj.get("lang")))
+                ? "- на английском языке (English), даже если сообщение на другом языке;\n"
+                : "- на русском языке, даже если сообщение на другом языке;\n";
         StringBuilder sb = new StringBuilder();
         if ("chat".equals(kind)) {
             sb.append("""
@@ -205,13 +211,12 @@ public final class ApiServer {
                     Требования:
                     - передай СМЫСЛ запроса (о чём он или чего хочет), а не копируй текст;
                     - максимум 4 слова, лучше 2-3;
-                    - на том же языке, что и сообщение;
-                    - без кавычек, точки, эмодзи и пояснений.
+                    %s- без кавычек, точки, эмодзи и пояснений.
                     Верни только само название.
 
                     Сообщение пользователя:
                     <<<
-                    """);
+                    """.formatted(langLine));
             sb.append(texts.get(0)).append("\n>>>");
         } else {
             sb.append("""
@@ -219,13 +224,12 @@ public final class ApiServer {
                     Придумай общее название этой группы веток по смыслу.
                     Требования:
                     - максимум 3 слова;
-                    - на том же языке, что и сообщение;
-                    - без кавычек, точки, эмодзи и пояснений.
+                    %s- без кавычек, точки, эмодзи и пояснений.
                     Верни только само название.
 
                     Сообщение:
                     <<<
-                    """);
+                    """.formatted(langLine));
             sb.append(texts.get(0)).append("\n>>>");
             if (texts.size() > 1) {
                 sb.append("\n\nВетки:");
@@ -270,6 +274,16 @@ public final class ApiServer {
         BadRequest(String message) {
             super(message);
         }
+    }
+
+    /** Язык интерфейса из тела запроса: "ru", "en" или null, если не указан. */
+    static String parseLang(String body) {
+        Object root = Json.parse(body);
+        return root instanceof Map<?, ?> obj ? parseLangValue(obj.get("lang")) : null;
+    }
+
+    static String parseLangValue(Object v) {
+        return "ru".equals(v) || "en".equals(v) ? (String) v : null;
     }
 
     static List<Message> parseHistory(String body) {

@@ -201,6 +201,9 @@ public final class GeminiClient {
         // Gemini требует чередование ролей и начало с user: склеиваем подряд идущие реплики одной роли.
         List<String[]> turns = new ArrayList<>();
         for (Message m : history) {
+            if ("system".equals(m.getRole())) {
+                continue; // запасной клиент: системные правила не передаём
+            }
             String role = "assistant".equals(m.getRole()) ? "model" : "user";
             if (turns.isEmpty() && role.equals("model")) {
                 continue;

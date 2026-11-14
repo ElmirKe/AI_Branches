@@ -3,6 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
 import { StoreProvider } from "./store";
 import App from "./App";
+import { tr } from "./lib/i18n";
 import { AuthScreen } from "./components/AuthScreen";
 
 /**
@@ -28,7 +29,7 @@ export default function Root() {
     };
   }, []);
 
-  if (!ready) return <div className="splash theme-light">Загрузка…</div>;
+  if (!ready) return <div className="splash theme-light">{tr().loading}</div>;
   if (supabase && !session) return (
       <div className="theme-light">
         <AuthScreen />

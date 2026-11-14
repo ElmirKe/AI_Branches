@@ -1,5 +1,5 @@
 import { useStore } from "../store";
-import { plural } from "../lib/layout";
+import { displayBranch, useLang, useT } from "../lib/i18n";
 
 export type MergeVisual = "none" | "anchor" | "candidate" | "picked" | "dimmed";
 
@@ -15,20 +15,22 @@ export function useMergeVisual(id: string): MergeVisual {
 /** Панель управления режимом слияния (показывается в шапке холста). */
 export function MergeMode() {
   const { state, index, mergeCandidates, mergeConfirm, mergeCancel } = useStore();
+  const t = useT();
+  const lang = useLang();
   if (!state.merge) return null;
   const anchor = index.byId.get(state.merge.anchorId);
   const n = state.merge.selected.length;
   return (
     <div className="merge-bar">
-      <span className="caption">Слияние</span>
+      <span className="caption">{t.merge}</span>
       <span>
-        Отметьте сестёр ветки «{anchor?.branch}» на холсте — доступно {mergeCandidates.size}, выбрано {n}
+        {t.mergeHint(displayBranch(anchor?.branch ?? "", lang), mergeCandidates.size, n)}
       </span>
       <button className="btn btn-primary" disabled={n === 0} onClick={mergeConfirm}>
-        Свести {n > 0 ? `${n + 1} ${plural(n + 1, "ветку", "ветки", "веток")}` : ""}
+        {t.mergeBtn(n)}
       </button>
       <button className="btn" onClick={mergeCancel}>
-        Отмена
+        {t.cancel}
       </button>
     </div>
   );

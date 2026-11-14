@@ -1,5 +1,6 @@
 import { CARD_H, CARD_W, type FamilyBox, type NodePos } from "../lib/layout";
 import type { Orientation } from "../types";
+import { useT } from "../lib/i18n";
 
 interface Props {
   family: FamilyBox;
@@ -18,6 +19,8 @@ const BORDER = 1.5;
  */
 export function FamilyGroup({ family, nodes, orientation, dimmed }: Props) {
   const horizontal = orientation === "horizontal";
+  const t = useT();
+  const prefix = (family.merged ? t.merged : t.family) + " · ";
   return (
     <>
       {family.segments.map((seg, si) => {
@@ -38,8 +41,8 @@ export function FamilyGroup({ family, nodes, orientation, dimmed }: Props) {
             <div className={"family-bg" + cont} style={box} />
             <div className={"family-frame" + (dimmed ? " dimmed" : "") + cont} style={box}>
               {seg.labeled && (
-                <div className="family-label" title={family.label}>
-                  {family.label}
+                <div className="family-label" title={prefix + family.label}>
+                  {prefix + family.label}
                 </div>
               )}
               {dividers.map((d, i) => (

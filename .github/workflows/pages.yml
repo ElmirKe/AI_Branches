@@ -35,6 +35,8 @@ jobs:
           cache-dependency-path: Riven_frontend/package-lock.json
       - run: npm ci
       - run: npm run build
+        env:
+          GH_PAGES: "1"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:

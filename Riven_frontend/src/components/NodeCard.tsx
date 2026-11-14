@@ -5,6 +5,7 @@ import { detectList } from "../lib/api";
 import { forkLevel, hasStructChildren, isMergeNode, type NodePos } from "../lib/layout";
 import { useMergeVisual } from "./MergeMode";
 import { Markdown } from "./Markdown";
+import { useT } from "../lib/i18n";
 
 interface Props {
   msg: Message;
@@ -16,6 +17,7 @@ export function NodeCard({ msg, pos }: Props) {
   const level = forkLevel(msg.id, index.byId);
   const merge = isMergeNode(msg);
   const mergeState = useMergeVisual(msg.id);
+  const t = useT();
 
   const items =
     msg.role === "assistant" && !msg.pending && !hasStructChildren(msg.id, index) ? detectList(msg.text) : [];
@@ -48,7 +50,7 @@ export function NodeCard({ msg, pos }: Props) {
     .filter(Boolean)
     .join(" ");
 
-  const roleLabel = merge ? "Слияние" : msg.role === "user" ? "Вы" : "Ассистент";
+  const roleLabel = merge ? t.merge : msg.role === "user" ? t.you : t.assistant;
 
   return (
     <div className={cls} style={{ left: pos.x, top: pos.y }} onClick={onClick} data-id={msg.id}>
@@ -56,17 +58,17 @@ export function NodeCard({ msg, pos }: Props) {
         <span className="caption">{roleLabel}</span>
         {items.length >= 2 && (
           <button className="card-action" onClick={stop(() => decompose(msg.id))}>
-            Разложить ({items.length})
+            {t.expandList(items.length)}
           </button>
         )}
         {merge && (
           <button className="card-action" onClick={stop(() => toggleExpanded(msg.id))}>
-            {expandedSet.has(msg.id) ? "Свернуть" : `Слитые (${msg.parents.length})`}
+            {expandedSet.has(msg.id) ? t.collapse : t.mergedCount(msg.parents.length)}
           </button>
         )}
       </div>
       <div ref={textRef} className={"card-text" + (overflow ? " overflow" : "")}>
-        {msg.pending ? <span className="pending">Печатает…</span> : msg.role === "assistant" ? <Markdown text={msg.text} /> : <span className="plain">{msg.text}</span>}
+        {msg.pending ? <span className="pending">{t.typing}</span> : msg.role === "assistant" ? <Markdown text={msg.text} /> : <span className="plain">{msg.text}</span>}
       </div>
     </div>
   );
