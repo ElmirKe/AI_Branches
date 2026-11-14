@@ -96,8 +96,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             value={state.orientation}
             onChange={setOrientation}
             options={[
-              { id: "horizontal", label: "↔ " + t.horizontal, hint: t.horizontalHint },
-              { id: "vertical", label: "↕ " + t.vertical, hint: t.verticalHint },
+              { id: "horizontal", label: t.horizontal, hint: t.horizontalHint },
+              { id: "vertical", label: t.vertical, hint: t.verticalHint },
             ]}
           />
         </section>

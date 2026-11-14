@@ -29,9 +29,9 @@ export default function Root() {
     };
   }, []);
 
-  if (!ready) return <div className="splash theme-light">{tr().loading}</div>;
+  if (!ready) return <div className="splash theme-dark">{tr().loading}</div>;
   if (supabase && !session) return (
-      <div className="theme-light">
+      <div className="theme-dark">
         <AuthScreen />
       </div>
     );

@@ -208,7 +208,7 @@ function initialState(user: AuthUser | null): State {
     trees: [first],
     currentTreeId: first.id,
     selectedId: null,
-    theme: loadPref("riven.theme", ["light", "dark"], "light"),
+    theme: loadPref("riven.theme", ["light", "dark"], "dark"),
     orientation: loadPref("riven.orientation", ["horizontal", "vertical"], "horizontal"),
     branchMode: false,
     merge: null,

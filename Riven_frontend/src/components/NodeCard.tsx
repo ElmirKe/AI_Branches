@@ -13,7 +13,7 @@ interface Props {
 }
 
 export function NodeCard({ msg, pos }: Props) {
-  const { index, expandedSet, selectNode, decompose, toggleExpanded, mergeToggle } = useStore();
+  const { state, index, expandedSet, selectNode, decompose, toggleExpanded, mergeToggle } = useStore();
   const level = forkLevel(msg.id, index.byId);
   const merge = isMergeNode(msg);
   const mergeState = useMergeVisual(msg.id);
@@ -46,6 +46,8 @@ export function NodeCard({ msg, pos }: Props) {
     merge ? "merge" : "",
     pos.familyId ? "in-family" : "",
     mergeState !== "none" ? mergeState : "",
+    state.selectedId === msg.id ? "selected" : "",
+    msg.role === "user" ? "role-user" : "role-ai",
   ]
     .filter(Boolean)
     .join(" ");
@@ -68,7 +70,7 @@ export function NodeCard({ msg, pos }: Props) {
         )}
       </div>
       <div ref={textRef} className={"card-text" + (overflow ? " overflow" : "")}>
-        {msg.pending ? <span className="pending">{t.typing}</span> : msg.role === "assistant" ? <Markdown text={msg.text} /> : <span className="plain">{msg.text}</span>}
+        {msg.pending ? <span className="typing" aria-label={t.typing}><i /><i /><i /></span> : msg.role === "assistant" ? <Markdown text={msg.text} /> : <span className="plain">{msg.text}</span>}
       </div>
     </div>
   );

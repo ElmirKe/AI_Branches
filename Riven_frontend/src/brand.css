@@ -1,0 +1,811 @@
+/* =====================================================================
+   Айдентика Riven. Цвета и фон взяты с логотипа: почти чёрный с синевой,
+   индиго-свечение, лавандовый вордмарк. Чтобы вернуть прежнюю бирюзовую
+   палитру, достаточно убрать импорт этого файла из main.tsx.
+   ===================================================================== */
+
+.theme-dark {
+  --bg-app: #05060d;
+  --bg-card: #0c0e1c;
+  --border: #1d2040;
+  --r-ctl: 8px;
+  --r-card: 10px;
+  --r-lg: 12px;
+  --text-primary: #ecebfb;
+  --text-secondary: #8f93b8;
+  --main-line: #8a8ef7;
+  --fork-line: #b3b6ff;
+  --gold: #d1d2ff;
+  --on-accent: #ffffff;
+  --accent: #5b5fe6;
+  --accent-hi: #7176f0;
+  --tint: color-mix(in srgb, #6a6fe8 9%, var(--bg-card));
+  --tint-strong: color-mix(in srgb, #6a6fe8 17%, var(--bg-card));
+  --glow: color-mix(in srgb, #6a6fe8 28%, transparent);
+  --dot: rgba(143, 147, 184, 0.16);
+  --btn-bg: #dcdcff;
+  --btn-fg: #0a0b1a;
+  --lit: #dcdcff;
+  --lit-fg: #0a0b1a;
+  --lit-dim: #4d5080;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 8px 22px rgba(1, 2, 18, 0.55), 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  --shadow-lg: 0 24px 56px rgba(1, 2, 18, 0.7), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+}
+.theme-light {
+  --bg-app: #f1f1fa;
+  --bg-card: #ffffff;
+  --border: #dadcf0;
+  --r-ctl: 8px;
+  --r-card: 10px;
+  --r-lg: 12px;
+  --text-primary: #14162b;
+  --text-secondary: #6a6e93;
+  --main-line: #4b4fd6;
+  --fork-line: #8c90ee;
+  --gold: #5a50c4;
+  --on-accent: #ffffff;
+  --accent: #4b4fd6;
+  --accent-hi: #5f63e2;
+  --tint: color-mix(in srgb, #4b4fd6 6%, #fff);
+  --tint-strong: color-mix(in srgb, #4b4fd6 12%, #fff);
+  --glow: color-mix(in srgb, #4b4fd6 20%, transparent);
+  --dot: rgba(106, 110, 147, 0.2);
+  --btn-bg: #14162b;
+  --btn-fg: #ffffff;
+  --lit: #14162b;
+  --lit-fg: #ffffff;
+  --lit-dim: #a9acd6;
+  --shadow-sm: 0 1px 2px rgba(20, 22, 60, 0.07);
+  --shadow-md: 0 6px 18px rgba(20, 22, 60, 0.09), 0 1px 2px rgba(20, 22, 60, 0.06);
+  --shadow-lg: 0 20px 48px rgba(20, 22, 60, 0.15), 0 4px 12px rgba(20, 22, 60, 0.08);
+}
+
+/* ---------- фон: формы со светящейся кромкой, как на баннере ---------- */
+.app.theme-dark,
+.theme-dark .auth,
+.splash.theme-dark {
+  background: #05060d url("/bg-dark.svg") center / cover no-repeat;
+}
+.app.theme-light,
+.theme-light .auth {
+  background: #f1f1fa url("/bg-light.svg") center / cover no-repeat;
+}
+.canvas-area {
+  background: none;
+}
+
+/* ---------- вордмарк, знак, слоган ---------- */
+.wordmark {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.theme-light .wordmark {
+  filter: invert(1) hue-rotate(180deg) brightness(0.5) saturate(1.4);
+}
+.mark {
+  display: block;
+}
+.mark-line {
+  stroke: var(--text-secondary);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  opacity: 0.7;
+}
+.mark-top,
+.mark-dim {
+  fill: var(--bg-card);
+  stroke: var(--text-secondary);
+  stroke-width: 1.4;
+  opacity: 0.8;
+}
+.mark-top {
+  stroke: var(--main-line);
+  opacity: 1;
+}
+.mark-lit {
+  fill: var(--fork-line);
+  stroke: var(--fork-line);
+  stroke-width: 1.4;
+}
+.theme-light .mark-lit {
+  fill: var(--main-line);
+  stroke: var(--main-line);
+}
+.tagline {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 300;
+  letter-spacing: 0.32em;
+  color: var(--text-secondary);
+  text-align: center;
+}
+.tagline b {
+  font-weight: 500;
+  color: var(--main-line);
+}
+.brand-rule {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  width: min(760px, 86%);
+  margin: 0 auto;
+  color: var(--text-secondary);
+}
+.brand-rule i {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--main-line) 55%, transparent));
+}
+.brand-rule i:last-child {
+  background: linear-gradient(270deg, transparent, color-mix(in srgb, var(--main-line) 55%, transparent));
+}
+
+/* =====================================================================
+   Язык «Lit Node»: всё нарисовано тонкой линией, заливку получает только
+   один элемент — тот, что сейчас выбран (как светящийся узел в логотипе).
+   Без теней, градиентов на объектах, свечения и «таблеток».
+   ===================================================================== */
+
+body {
+  font-family: "Onest Variable", "Onest", system-ui, sans-serif;
+}
+.app {
+  font-weight: 400;
+}
+.caption {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11.5px;
+  font-weight: 400;
+}
+.mono,
+.chat-item small {
+  font-family: "JetBrains Mono Variable", ui-monospace, monospace;
+}
+
+/* ---------- кнопки ---------- */
+.btn,
+.btn:hover:not(:disabled) {
+  box-shadow: none;
+  transform: none;
+}
+.btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-weight: 500;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.btn:hover:not(:disabled) {
+  border-color: var(--main-line);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.btn.active {
+  background: transparent;
+  border-color: var(--main-line);
+  color: var(--main-line);
+}
+.btn-primary,
+.btn-primary:hover:not(:disabled) {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border-color: var(--btn-bg);
+  box-shadow: none;
+}
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+/* ---------- сайдбар ---------- */
+.sidebar {
+  background: transparent;
+  box-shadow: none;
+  border-right: 1px solid var(--border);
+  backdrop-filter: none;
+  padding: 18px 14px 14px;
+}
+.theme-dark .sidebar {
+  background: transparent;
+}
+.theme-light .sidebar {
+  background: transparent;
+}
+.brand {
+  padding: 2px 6px 14px;
+}
+.sidebar > .btn-primary {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  justify-content: flex-start;
+  padding: 9px 12px;
+}
+.sidebar > .btn-primary:hover:not(:disabled) {
+  border-color: var(--main-line);
+  opacity: 1;
+}
+.chat-list {
+  gap: 0;
+  margin-top: 6px;
+}
+.chat-item,
+.chat-item:hover,
+.chat-item.active {
+  background: transparent;
+}
+.chat-item {
+  gap: 12px;
+  padding: 8px 6px;
+  border-radius: 0;
+  color: var(--text-secondary);
+}
+.chat-item.active::before {
+  content: none;
+}
+.chat-item .node {
+  flex: none;
+  width: 9px;
+  height: 8px;
+  border-radius: 2.5px;
+  border: 1px solid var(--text-secondary);
+  opacity: 0.6;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+.chat-item:hover .node {
+  opacity: 1;
+  border-color: var(--main-line);
+}
+.chat-item.active .node {
+  opacity: 1;
+  background: var(--lit);
+  border-color: var(--lit);
+}
+.chat-title {
+  font-weight: 400;
+  color: var(--text-secondary);
+  transition: color 0.15s ease;
+}
+.chat-item:hover .chat-title,
+.chat-item.active .chat-title {
+  color: var(--text-primary);
+}
+.chat-item small {
+  font-size: 10px;
+  opacity: 0.7;
+}
+.account {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.avatar {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--r-ctl);
+  font-weight: 500;
+}
+.theme-switch {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  gap: 14px;
+  justify-content: flex-start;
+  padding-left: 6px;
+}
+.theme-switch button,
+.theme-switch button.active {
+  flex: none;
+  padding: 4px 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid transparent;
+}
+.theme-switch button.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--main-line);
+}
+
+/* ---------- холст ---------- */
+.canvas-scroll {
+  background-image: none;
+}
+.canvas-head {
+  padding: 26px 36px 12px;
+}
+.canvas-head h1 {
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.canvas-head p {
+  font-size: 12.5px;
+}
+.orient-switch {
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
+  border: 0;
+  padding: 0;
+  gap: 16px;
+}
+.orient-switch button,
+.orient-switch button.active,
+.orient-switch button:not(.active):hover {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 4px 0;
+  font-weight: 400;
+  color: var(--text-secondary);
+  border-bottom: 1px solid transparent;
+}
+.orient-switch button:not(.active):hover {
+  color: var(--text-primary);
+}
+.orient-switch button.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--main-line);
+}
+
+/* ---------- узлы дерева ---------- */
+.card,
+.card:not(.in-family):hover,
+.theme-dark .card:not(.in-family) {
+  box-shadow: none;
+}
+.card {
+  border-width: 1px;
+  border-color: color-mix(in srgb, var(--main-line) 55%, transparent);
+  background: var(--bg-card);
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.theme-dark .card:not(.in-family) {
+  background: var(--bg-card);
+}
+.card:not(.in-family):hover {
+  border-color: var(--main-line);
+}
+.card.in-family:hover {
+  background: var(--tint);
+}
+/* единственный «зажжённый» узел */
+.card.selected,
+.card.selected:not(.in-family),
+.card.in-family.selected {
+  background: var(--lit);
+  border-color: var(--lit);
+  color: var(--lit-fg);
+  box-shadow: none;
+}
+.card.selected .caption,
+.card.selected .card-action {
+  color: var(--lit-dim);
+}
+.card.selected .card-text.overflow::after {
+  background: linear-gradient(transparent, var(--lit));
+}
+.card.selected .md code {
+  background: transparent;
+  border-color: var(--lit-dim);
+}
+.card-action,
+.card-action:hover,
+.card.merge .card-action {
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  border-radius: 0;
+  font-weight: 400;
+}
+.card-action:hover {
+  text-decoration: underline;
+}
+.family-bg {
+  background: var(--bg-card);
+  box-shadow: none;
+}
+.family-frame {
+  border-width: 1px;
+  border-color: color-mix(in srgb, var(--main-line) 55%, transparent);
+}
+.family-label {
+  left: 0;
+  padding: 0 2px;
+  background: transparent;
+  color: var(--main-line);
+  border-radius: 0;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.family-divider {
+  background: var(--border);
+}
+.merge-bar {
+  box-shadow: none;
+}
+
+/* ---------- стартовый экран ---------- */
+.start {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 0;
+  padding: 0 clamp(28px, 11vw, 190px) 6vh;
+}
+.start-box {
+  width: min(640px, 100%);
+  max-width: none;
+  margin: 0;
+  align-items: flex-start;
+  text-align: left;
+  gap: 0;
+}
+.start-mark {
+  margin: 0 0 14px -6px;
+}
+.start .tagline {
+  text-align: left;
+  margin-bottom: 44px;
+}
+.start-box p:not(.tagline) {
+  max-width: 460px;
+  margin: 0 0 16px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.6;
+  text-align: left;
+}
+.start-input textarea,
+.start-input textarea:focus {
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.start-input textarea {
+  display: block;
+  min-height: 104px;
+  border-radius: var(--r-lg);
+  border: 1px solid color-mix(in srgb, var(--main-line) 45%, var(--border));
+  background: var(--bg-card);
+}
+.start-input textarea:focus {
+  border-color: var(--lit);
+}
+.send-fab,
+.send-fab:hover:not(:disabled) {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  box-shadow: none;
+  transform: none;
+  border-radius: var(--r-ctl);
+  width: 36px;
+  height: 36px;
+}
+.send-fab:disabled {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  opacity: 1;
+}
+/* примеры вопросов растут из поля ввода как ветки */
+.ideas {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 0;
+  margin: 0 0 0 26px;
+  padding: 14px 0 0;
+}
+.ideas-cap {
+  padding: 0 0 4px 22px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+.idea,
+.idea:hover {
+  box-shadow: none;
+  transform: none;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.idea {
+  position: relative;
+  padding: 7px 0 7px 22px;
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  text-align: left;
+  transition: color 0.15s ease;
+}
+.idea::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 14px;
+  height: 1px;
+  background: color-mix(in srgb, var(--main-line) 45%, var(--border));
+  transition: width 0.15s ease, background 0.15s ease;
+}
+.idea:hover {
+  color: var(--text-primary);
+}
+.idea:hover::before {
+  width: 18px;
+  background: var(--lit);
+}
+.idea:last-child {
+  margin-bottom: -1px;
+}
+.ideas::after {
+  /* ствол заканчивается на последней ветке */
+  content: "";
+  position: absolute;
+  left: -1px;
+  bottom: 0;
+  width: 1px;
+  height: 17px;
+  display: none;
+}
+
+/* ---------- поля ---------- */
+textarea:focus {
+  box-shadow: none;
+}
+
+/* ---------- правая панель ---------- */
+.panel {
+  box-shadow: none;
+  border-left: 1px solid var(--border);
+  background: var(--bg-card);
+}
+.theme-dark .panel {
+  background: rgba(7, 8, 19, 0.92);
+}
+.panel-head h2 {
+  font-size: 15px;
+  font-weight: 500;
+}
+.msg.from-user .msg-text {
+  max-width: 86%;
+  padding: 9px 13px;
+  border-radius: var(--r-card);
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid color-mix(in srgb, var(--main-line) 45%, var(--border));
+  box-shadow: none;
+}
+.msg.from-ai .caption::before {
+  content: none;
+}
+.msg.from-ai .msg-text {
+  padding: 0;
+}
+.msg.from-ai .caption {
+  color: var(--main-line);
+}
+.panel-hint {
+  border-top: 1px solid var(--border);
+}
+.composer textarea {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+}
+.composer textarea:focus {
+  border-color: var(--lit);
+}
+.composer-note {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-weight: 400;
+  color: var(--main-line);
+}
+
+/* ---------- Markdown ---------- */
+.md code,
+.md th,
+.md blockquote {
+  background: transparent;
+}
+.md blockquote {
+  border-radius: 0;
+}
+
+/* ---------- вход ---------- */
+.auth {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 34px;
+  padding: 36px 16px 28px;
+  min-height: 100vh;
+  color: var(--text-primary);
+}
+.auth-lockup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.auth-card {
+  width: min(340px, calc(100vw - 32px));
+  padding: 0;
+  gap: 14px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.auth-title {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-align: center;
+}
+.auth-sub {
+  text-align: center;
+  margin: -6px 0 6px;
+}
+.auth-card label {
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+.auth-card input {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+.auth-card input:focus {
+  border-color: var(--lit);
+  box-shadow: none;
+}
+.auth-card .btn-primary {
+  margin-top: 4px;
+}
+.auth-switch {
+  color: var(--text-secondary);
+  text-align: center;
+}
+.auth-switch:hover {
+  color: var(--text-primary);
+}
+.auth .brand-rule {
+  margin-top: 14px;
+}
+
+/* ---------- мобильные ---------- */
+@media (max-width: 900px) {
+  .tagline {
+    letter-spacing: 0.22em;
+    font-size: 13px;
+  }
+  .start {
+    padding: 0 20px 4vh;
+  }
+  .start-mark .wordmark {
+    height: 72px !important;
+  }
+  .start .tagline {
+    margin-bottom: 28px;
+  }
+  .auth-lockup .wordmark {
+    height: 68px !important;
+  }
+  .brand-rule {
+    width: 92%;
+    gap: 14px;
+  }
+}
+
+/* ствол веток под полем ввода: до середины последней ветки */
+.ideas::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 16px;
+  width: 1px;
+  background: color-mix(in srgb, var(--main-line) 45%, var(--border));
+}
+
+/* ---------- настройки ---------- */
+.settings-btn {
+  border-top: 1px solid var(--border);
+  padding: 12px 6px 4px;
+  color: var(--text-secondary);
+  gap: 12px;
+  transition: color 0.15s ease;
+}
+.settings-btn:hover {
+  color: var(--text-primary);
+}
+.settings-btn-text {
+  font-weight: 400;
+  color: var(--text-primary);
+}
+.sync-dot {
+  background: var(--lit);
+}
+.modal-back {
+  background: rgba(3, 4, 12, 0.6);
+  backdrop-filter: blur(3px);
+}
+.theme-light .modal-back {
+  background: rgba(20, 22, 43, 0.25);
+}
+.modal {
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  box-shadow: none;
+  padding: 20px 24px 22px;
+}
+.theme-dark .modal {
+  background: #090a17;
+  border-color: color-mix(in srgb, var(--main-line) 30%, var(--border));
+}
+.modal-head h2 {
+  font-weight: 500;
+  font-size: 17px;
+}
+.set-row h3 {
+  font-weight: 400;
+  font-size: 12px;
+}
+.seg {
+  border-radius: var(--r-ctl);
+  border-color: var(--border);
+}
+.seg button {
+  font-weight: 400;
+  color: var(--text-secondary);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.seg button:hover:not(.active) {
+  color: var(--text-primary);
+}
+.seg button + button {
+  border-left-color: var(--border);
+}
+.seg button.active {
+  background: var(--lit);
+  color: var(--lit-fg);
+}
+.avatar {
+  border-radius: var(--r-ctl);
+}
+.set-account .btn {
+  flex: none;
+}
+.auth {
+  position: relative;
+}
+.auth-lang {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+}
+.card-action {
+  text-transform: none;
+  letter-spacing: 0;
+}

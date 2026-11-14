@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useStore } from "../store";
 import { isMergeNode, lineage, sisters } from "../lib/layout";
 import { displayBranch, useLang, useT } from "../lib/i18n";
+import { IconBranch, IconMerge, IconSend } from "./Icons";
 import { Markdown } from "./Markdown";
 
 export function BranchPanel() {
@@ -59,9 +60,9 @@ export function BranchPanel() {
         {line.map((m) => {
           const merge = isMergeNode(m);
           return (
-            <div key={m.id} className={"msg" + (merge ? " merge" : "")}>
+            <div key={m.id} className={"msg" + (merge ? " merge" : "") + (m.role === "user" ? " from-user" : " from-ai")}>
               <span className="caption">{merge ? t.merge : m.role === "user" ? t.you : t.assistant}</span>
-              <div className="msg-text">{m.pending ? <span className="pending">{t.typing}</span> : m.role === "assistant" ? <Markdown text={m.text} /> : <span className="plain">{m.text}</span>}</div>
+              <div className="msg-text">{m.pending ? <span className="typing" aria-label={t.typing}><i /><i /><i /></span> : m.role === "assistant" ? <Markdown text={m.text} /> : <span className="plain">{m.text}</span>}</div>
             </div>
           );
         })}
@@ -81,11 +82,11 @@ export function BranchPanel() {
             else setBranchMode(!state.branchMode);
           }}
         >
-          {t.branch}
+          <IconBranch size={15} /> {t.branch}
         </button>
         {sis.length > 0 && !consumed && (
           <button className="btn" disabled={merging} onClick={() => mergeStart(selected.id)}>
-            {t.combine}
+            <IconMerge size={15} /> {t.combine}
           </button>
         )}
       </div>
@@ -106,7 +107,7 @@ export function BranchPanel() {
         />
         <div className="composer-actions">
           <button className="btn btn-primary" disabled={!canSend} onClick={submit}>
-            {branchOn ? t.branch : t.send}
+            {branchOn ? t.branch : t.send} <IconSend size={15} />
           </button>
         </div>
       </div>

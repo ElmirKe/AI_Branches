@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { supabase } from "../lib/supabase";
 import { LANGS, setLang, tr, useLang, useT } from "../lib/i18n";
+import { BrandRule, Tagline, Wordmark } from "./Brand";
 
 /** Понятные сообщения вместо английских ошибок Supabase. */
 function explain(message: string): string {
@@ -50,24 +51,20 @@ export function AuthScreen() {
 
   return (
     <div className="auth">
+      <div className="seg seg-sm auth-lang" role="group" aria-label="Language">
+        {LANGS.map((l) => (
+          <button key={l.id} type="button" className={lang === l.id ? "active" : ""} aria-pressed={lang === l.id} onClick={() => setLang(l.id)}>
+            {l.id.toUpperCase()}
+          </button>
+        ))}
+      </div>
+      <div className="auth-lockup">
+        <Wordmark height={96} />
+        <Tagline />
+      </div>
       <form className="auth-card" onSubmit={submit}>
-        <div className="auth-top">
-          <div className="brand">Riven</div>
-          <div className="seg seg-sm" role="group" aria-label="Language">
-            {LANGS.map((l) => (
-              <button
-                key={l.id}
-                type="button"
-                className={lang === l.id ? "active" : ""}
-                aria-pressed={lang === l.id}
-                onClick={() => setLang(l.id)}
-              >
-                {l.id.toUpperCase()}
-              </button>
-            ))}
-          </div>
-        </div>
-        <p className="auth-sub">{t.authSub}</p>
+        <h1 className="auth-title">{mode === "in" ? t.welcomeBack : t.createAccount}</h1>
+        <p className="auth-sub">{mode === "in" ? t.signInSub : t.signUpSub}</p>
         <label>
           {t.email}
           <input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -100,6 +97,7 @@ export function AuthScreen() {
           {mode === "in" ? t.toSignUp : t.toSignIn}
         </button>
       </form>
+      <BrandRule />
     </div>
   );
 }

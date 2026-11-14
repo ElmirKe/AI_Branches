@@ -4,6 +4,7 @@ import { CARD_H, CARD_W, computeLayout } from "../lib/layout";
 import { NodeCard } from "./NodeCard";
 import { FamilyGroup } from "./FamilyGroup";
 import { MergeMode } from "./MergeMode";
+import { IconHoriz, IconVert } from "./Icons";
 import { displayTitle, useLang, useT } from "../lib/i18n";
 
 const WIDTHS = [3, 1.8, 1.2];
@@ -66,7 +67,7 @@ export function TreeCanvas() {
               onClick={() => setOrientation("horizontal")}
               title={t.horizontalHint}
             >
-              ↔ {t.horizontal}
+              <IconHoriz size={14} /> {t.horizontal}
             </button>
             <button
               className={orientation === "vertical" ? "active" : ""}
@@ -74,7 +75,7 @@ export function TreeCanvas() {
               onClick={() => setOrientation("vertical")}
               title={t.verticalHint}
             >
-              ↕ {t.vertical}
+              <IconVert size={14} /> {t.vertical}
             </button>
           </div>
         </div>
