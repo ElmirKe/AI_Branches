@@ -1042,3 +1042,29 @@ textarea:focus {
   font-size: 13px;
   outline: none;
 }
+
+/* Карточки внутри рамки семьи квадратные, а рамка скруглена: подсветку рисуем
+   скруглённой «плашкой» с отступом, чтобы она не вылезала за углы рамки */
+.card.in-family.selected,
+.card.in-family:hover {
+  background: transparent;
+}
+.card.in-family::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  z-index: -1;
+  border-radius: var(--r-ctl);
+  background: transparent;
+  transition: background 0.15s ease;
+  pointer-events: none;
+}
+.card.in-family:hover::after {
+  background: var(--tint);
+}
+.card.in-family.selected::after {
+  background: var(--lit);
+}
+.card.in-family.selected {
+  border-color: transparent;
+}
