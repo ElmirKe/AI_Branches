@@ -4,13 +4,12 @@ import { CARD_H, CARD_W, computeLayout } from "../lib/layout";
 import { NodeCard } from "./NodeCard";
 import { FamilyGroup } from "./FamilyGroup";
 import { MergeMode } from "./MergeMode";
-import { IconHoriz, IconVert } from "./Icons";
 import { displayTitle, useLang, useT } from "../lib/i18n";
 
 const WIDTHS = [3, 1.8, 1.2];
 
 export function TreeCanvas() {
-  const { state, currentTree, index, expandedSet, mergeCandidates, selectNode, setOrientation } = useStore();
+  const { state, currentTree, index, expandedSet, mergeCandidates, selectNode } = useStore();
   const orientation = state.orientation;
   const t = useT();
   const lang = useLang();
@@ -60,24 +59,6 @@ export function TreeCanvas() {
       <header className="canvas-head">
         <div className="canvas-head-row">
           <h1>{displayTitle(currentTree.title, lang)}</h1>
-          <div className="orient-switch" role="group" aria-label={t.treeDirection}>
-            <button
-              className={orientation === "horizontal" ? "active" : ""}
-              aria-pressed={orientation === "horizontal"}
-              onClick={() => setOrientation("horizontal")}
-              title={t.horizontalHint}
-            >
-              <IconHoriz size={14} /> {t.horizontal}
-            </button>
-            <button
-              className={orientation === "vertical" ? "active" : ""}
-              aria-pressed={orientation === "vertical"}
-              onClick={() => setOrientation("vertical")}
-              title={t.verticalHint}
-            >
-              <IconVert size={14} /> {t.vertical}
-            </button>
-          </div>
         </div>
         {merging ? (
           <MergeMode />

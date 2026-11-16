@@ -30,6 +30,8 @@ export function replyDelay(): number {
 export interface ChatTurn {
   role: "user" | "assistant";
   content: string;
+  /** ссылки на картинки (data:URL или временная https-ссылка) */
+  images?: string[];
 }
 
 /**
@@ -117,24 +119,3 @@ export async function fetchTitle(kind: "chat" | "family", texts: string[]): Prom
   }
 }
 
-const ITEM_RE = /^\s*\d+[.)]\s/;
-const STRIP_RE = /^\s*(\d+[.)]\s*|[-–—•*]\s+)/;
-
-/**
- * Возвращает пункты нумерованного списка (1. 2. 3.), если их 2+ подряд
- * (пустые строки между ними допустимы). Иначе — пустой массив.
- */
-export function detectList(text: string): string[] {
-  let best: string[] = [];
-  let run: string[] = [];
-  for (const line of text.split("\n")) {
-    if (ITEM_RE.test(line)) {
-      run.push(line.replace(STRIP_RE, "").trim());
-    } else if (line.trim() !== "") {
-      if (run.length > best.length) best = run;
-      run = [];
-    }
-  }
-  if (run.length > best.length) best = run;
-  return best.length >= 2 ? best : [];
-}

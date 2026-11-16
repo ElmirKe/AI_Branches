@@ -1,10 +1,11 @@
 import { useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import type { Message } from "../types";
 import { useStore } from "../store";
-import { detectList } from "../lib/api";
+import { detectList } from "../lib/list";
 import { forkLevel, hasStructChildren, isMergeNode, type NodePos } from "../lib/layout";
 import { useMergeVisual } from "./MergeMode";
 import { Markdown } from "./Markdown";
+import { MessageImages } from "./Attachments";
 import { useT } from "../lib/i18n";
 
 interface Props {
@@ -70,6 +71,7 @@ export function NodeCard({ msg, pos }: Props) {
         )}
       </div>
       <div ref={textRef} className={"card-text" + (overflow ? " overflow" : "")}>
+        <MessageImages images={msg.images} small />
         {msg.pending ? <span className="typing" aria-label={t.typing}><i /><i /><i /></span> : msg.role === "assistant" ? <Markdown text={msg.text} /> : <span className="plain">{msg.text}</span>}
       </div>
     </div>

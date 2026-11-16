@@ -1,8 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import type { ChatTree, Message, Orientation, Theme } from "./types";
-import { detectList, fetchReply, fetchTitle, type ChatTurn } from "./lib/api";
+import { fetchReply, fetchTitle, type ChatTurn } from "./lib/api";
+import { detectList } from "./lib/list";
 import { shortTitle } from "./lib/title";
-import { loadTrees, saveChat, saveMessages } from "./lib/db";
+import { deleteChat, loadTrees, saveChat, saveMessages } from "./lib/db";
+import { deleteChatImages, imageUrl, isDataUrl, MAX_IMAGES_PER_MESSAGE, uploadImage } from "./lib/images";
 import { supabase } from "./lib/supabase";
 import { tr } from "./lib/i18n";
 import {
@@ -51,7 +53,10 @@ type Action =
   | { type: "MERGE_TOGGLE"; id: string }
   | { type: "MERGE_CONFIRM" }
   | { type: "MERGE_CANCEL" }
-  | { type: "TOGGLE_EXPANDED"; id: string };
+  | { type: "TOGGLE_EXPANDED"; id: string }
+  | { type: "RENAME_TREE"; id: string; title: string }
+  | { type: "DELETE_TREE"; id: string }
+  | { type: "SET_IMAGES"; treeId: string; id: string; images: string[] };
 
 const NEW_TITLE = "Новый чат";
 
@@ -84,7 +89,8 @@ function newChatId(): string {
 }
 
 /** Подпись сообщения: если она не менялась, повторно в базу его не отправляем. */
-const msgSig = (m: Message) => `${m.text}\u0000${m.branch}\u0000${m.parents.join(",")}`;
+const msgSig = (m: Message) =>
+  `${m.text}\u0000${m.branch}\u0000${m.parents.join(",")}\u0000${(m.images ?? []).filter((x) => !isDataUrl(x)).join(",")}`;
 const chatSig = (t: ChatTree) => JSON.stringify([t.title, t.familyTitles ?? {}]);
 
 function updateTree(state: State, treeId: string, fn: (t: ChatTree) => ChatTree): State {
@@ -158,6 +164,21 @@ function reducer(state: State, a: Action): State {
     }
     case "MERGE_CANCEL":
       return { ...state, merge: null };
+    case "RENAME_TREE":
+      return updateTree(state, a.id, (t) => ({ ...t, title: a.title }));
+    case "DELETE_TREE": {
+      const rest = state.trees.filter((t) => t.id !== a.id);
+      const trees = rest.length > 0 ? rest : [{ id: newChatId(), title: NEW_TITLE, createdAt: Date.now(), messages: [] }];
+      if (state.currentTreeId !== a.id) return { ...state, trees };
+      // открываем пустой новый чат, если он есть, иначе первый в списке
+      const next = trees.find((t) => t.messages.length === 0) ?? trees[0];
+      return { ...state, trees, currentTreeId: next.id, selectedId: null, merge: null, branchMode: false };
+    }
+    case "SET_IMAGES":
+      return updateTree(state, a.treeId, (t) => ({
+        ...t,
+        messages: t.messages.map((m) => (m.id === a.id ? { ...m, images: a.images } : m)),
+      }));
     case "TOGGLE_EXPANDED":
       return {
         ...state,
@@ -180,7 +201,9 @@ export interface Store {
   setTheme: (t: Theme) => void;
   setOrientation: (o: Orientation) => void;
   setBranchMode: (on: boolean) => void;
-  sendMessage: (text: string) => void;
+  sendMessage: (text: string, images?: string[]) => void;
+  renameTree: (id: string, title: string) => void;
+  deleteTree: (id: string) => void;
   decompose: (id: string) => void;
   mergeStart: (id: string) => void;
   mergeToggle: (id: string) => void;
@@ -336,16 +359,17 @@ export function StoreProvider({ children, user = null }: { children: ReactNode; 
   }, [state.trees]);
 
   const sendMessage = useCallback(
-    (text: string) => {
+    (text: string, images: string[] = []) => {
       const trimmed = text.trim();
-      if (!trimmed) return;
+      const imgs = images.slice(0, MAX_IMAGES_PER_MESSAGE);
+      if (!trimmed && imgs.length === 0) return;
       const treeId = currentTree.id;
       let userMsg: Message;
       let title: string | undefined;
       let history: Message[] = []; // родословная: что ИИ уже «знает» на этом пути
       if (currentTree.messages.length === 0) {
         userMsg = { id: uid(), parents: [], role: "user", branch: ROOT_BRANCH, text: trimmed };
-        title = shortTitle(trimmed, 4); // сразу — локальная выжимка, ниже её заменит название от ИИ
+        title = shortTitle(trimmed || tr().imageMsg, 4); // сразу — локальная выжимка, ниже её заменит название от ИИ
       } else {
         const parent = state.selectedId ? index.byId.get(state.selectedId) : undefined;
         if (!parent || parent.pending) return; // ответ ещё печатается — ждём
@@ -359,10 +383,11 @@ export function StoreProvider({ children, user = null }: { children: ReactNode; 
           id: uid(),
           parents: [parent.id],
           role: "user",
-          branch: fork ? truncate(trimmed, 28) : parent.branch,
+          branch: fork ? truncate(trimmed || tr().imageMsg, 28) : parent.branch,
           text: trimmed,
         };
       }
+      if (imgs.length > 0) userMsg.images = imgs;
       const reply: Message = {
         id: uid(),
         parents: [userMsg.id],
@@ -372,7 +397,15 @@ export function StoreProvider({ children, user = null }: { children: ReactNode; 
         pending: true,
       };
       dispatch({ type: "ADD_MESSAGES", treeId, messages: [userMsg, reply], select: reply.id, title });
-      if (title) {
+      // картинки загружаем в хранилище; пока грузятся, в сообщении остаются data:URL
+      if (imgs.length > 0 && user && supabase) {
+        const msgId = userMsg.id;
+        Promise.all(imgs.map((d) => uploadImage(user.id, treeId, d))).then(
+          (paths) => dispatch({ type: "SET_IMAGES", treeId, id: msgId, images: paths }),
+          (e) => console.error("[storage] картинка не загрузилась:", e),
+        );
+      }
+      if (title && trimmed) {
         // название чата — выжимка смысла первого сообщения (до 4 слов), а не его копия
         fetchTitle("chat", [trimmed]).then((t) => {
           if (t) dispatch({ type: "SET_TITLE", treeId, title: t, ifCurrent: title });
@@ -380,10 +413,10 @@ export function StoreProvider({ children, user = null }: { children: ReactNode; 
       }
 
       // ИИ получает только путь от корня до этого вопроса — соседних веток в нём нет
-      const context: ChatTurn[] = [...history, userMsg]
-        .filter((m) => !m.pending && !m.error && m.text.trim() !== "")
-        .map((m) => ({ role: m.role, content: m.text }));
-      fetchReply(context).then(
+      const line = [...history, userMsg].filter(
+        (m) => !m.pending && !m.error && (m.text.trim() !== "" || (m.images?.length ?? 0) > 0),
+      );
+      buildContext(line).then(fetchReply).then(
         (text) => dispatch({ type: "RESOLVE_PENDING", treeId, id: reply.id, text }),
         (e: unknown) =>
           dispatch({
@@ -395,7 +428,27 @@ export function StoreProvider({ children, user = null }: { children: ReactNode; 
           }),
       );
     },
-    [currentTree, index, state.selectedId, state.branchMode],
+    [currentTree, index, state.selectedId, state.branchMode, user],
+  );
+
+  const deleteTree = useCallback(
+    (id: string) => {
+      const wasSaved = synced.current.has(`ok:${id}`);
+      dispatch({ type: "DELETE_TREE", id });
+      for (const key of [...synced.current.keys()]) if (key.includes(id)) synced.current.delete(key);
+      if (!user || !wasSaved) return;
+      // в очередь после возможного сохранения этого чата, чтобы оно не «воскресило» его
+      queue.current = queue.current.then(async () => {
+        try {
+          await deleteChat(id);
+          await deleteChatImages(user.id, id).catch(() => undefined);
+        } catch (e) {
+          console.error("[supabase] не удалось удалить чат:", e);
+          setSyncStatus("error");
+        }
+      });
+    },
+    [user],
   );
 
   const decompose = useCallback(
@@ -429,6 +482,11 @@ export function StoreProvider({ children, user = null }: { children: ReactNode; 
     setOrientation: (orientation) => dispatch({ type: "SET_ORIENTATION", orientation }),
     setBranchMode: (on) => dispatch({ type: "SET_BRANCH_MODE", on }),
     sendMessage,
+    renameTree: (id, title) => {
+      const t = title.trim().slice(0, 80);
+      if (t) dispatch({ type: "RENAME_TREE", id, title: t });
+    },
+    deleteTree,
     decompose,
     mergeStart: (id) => dispatch({ type: "MERGE_START", id }),
     mergeToggle: (id) => dispatch({ type: "MERGE_TOGGLE", id }),
@@ -443,6 +501,29 @@ export function StoreProvider({ children, user = null }: { children: ReactNode; 
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
+}
+
+/**
+ * Сообщения для ИИ. Модель-зрение принимает не больше 3 картинок за раз, поэтому
+ * берём последние три, а у более ранних сообщений картинки заменяем пометкой.
+ */
+async function buildContext(line: Message[]): Promise<ChatTurn[]> {
+  let left = MAX_IMAGES_PER_MESSAGE;
+  const out: ChatTurn[] = [];
+  for (let i = line.length - 1; i >= 0; i--) {
+    const m = line[i];
+    const turn: ChatTurn = { role: m.role, content: m.text };
+    const imgs = m.role === "user" ? (m.images ?? []) : [];
+    if (imgs.length > 0) {
+      const keep = imgs.slice(Math.max(0, imgs.length - left));
+      left -= keep.length;
+      const urls = (await Promise.all(keep.map(imageUrl))).filter((u): u is string => !!u);
+      if (urls.length > 0) turn.images = urls;
+      if (urls.length < imgs.length) turn.content = (m.text ? m.text + "\n" : "") + tr().imageNote;
+    }
+    out.unshift(turn);
+  }
+  return out;
 }
 
 export function useStore(): Store {

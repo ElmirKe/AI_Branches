@@ -24,22 +24,34 @@ public final class OpenAiClient {
 
     public static final String DEFAULT_BASE_URL = "https://api.groq.com/openai/v1";
     public static final List<String> DEFAULT_MODELS = List.of("qwen/qwen3-32b", "openai/gpt-oss-120b");
+    /** модели, которые видят картинки (Groq, ноябрь 2026) */
+    public static final List<String> DEFAULT_VISION_MODELS = List.of("qwen/qwen3.8-27b");
 
     private static final Pattern SAFE_MODEL = Pattern.compile("[A-Za-z0-9._:/-]{1,100}");
     private static final Pattern THINK = Pattern.compile("(?s)<think>.*?</think>");
 
     private final String apiKey;
     private final List<String> models;
+    private final List<String> visionModels;
     private final String baseUrl;
     private final Duration attemptTimeout;
     private final Duration totalTimeout;
     private final HttpClient http;
 
     public OpenAiClient(String apiKey, List<String> models, String baseUrl) {
-        this(apiKey, models, baseUrl, Duration.ofSeconds(20), Duration.ofSeconds(40));
+        this(apiKey, models, DEFAULT_VISION_MODELS, baseUrl, Duration.ofSeconds(20), Duration.ofSeconds(40));
+    }
+
+    public OpenAiClient(String apiKey, List<String> models, List<String> visionModels, String baseUrl) {
+        this(apiKey, models, visionModels, baseUrl, Duration.ofSeconds(20), Duration.ofSeconds(40));
     }
 
     public OpenAiClient(String apiKey, List<String> models, String baseUrl,
+                        Duration attemptTimeout, Duration totalTimeout) {
+        this(apiKey, models, DEFAULT_VISION_MODELS, baseUrl, attemptTimeout, totalTimeout);
+    }
+
+    public OpenAiClient(String apiKey, List<String> models, List<String> visionModels, String baseUrl,
                         Duration attemptTimeout, Duration totalTimeout) {
         if (apiKey == null || apiKey.isBlank()) {
             throw new IllegalArgumentException("Пустой ключ ИИ");
@@ -47,13 +59,17 @@ public final class OpenAiClient {
         if (models == null || models.isEmpty()) {
             throw new IllegalArgumentException("Пустой список моделей");
         }
-        for (String m : models) {
+        if (visionModels == null || visionModels.isEmpty()) {
+            visionModels = DEFAULT_VISION_MODELS;
+        }
+        for (String m : concat(models, visionModels)) {
             if (!SAFE_MODEL.matcher(m).matches()) {
                 throw new IllegalArgumentException("Недопустимое имя модели: " + m);
             }
         }
         this.apiKey = apiKey.trim();
         this.models = List.copyOf(models);
+        this.visionModels = List.copyOf(visionModels);
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.attemptTimeout = attemptTimeout;
         this.totalTimeout = totalTimeout;
@@ -63,8 +79,17 @@ public final class OpenAiClient {
                 .build();
     }
 
+    private static List<String> concat(List<String> a, List<String> b) {
+        List<String> all = new ArrayList<>(a);
+        all.addAll(b);
+        return all;
+    }
+
     /** История (последнее — от пользователя) -> ответ модели. */
     public String ask(List<Message> history) {
+        // есть картинки — отвечает модель-зрение, иначе обычные модели
+        boolean withImages = history.stream().anyMatch(m -> !m.getImages().isEmpty());
+        List<String> models = withImages ? visionModels : this.models;
         long deadline = System.nanoTime() + totalTimeout.toNanos();
         String lastProblem = "нет ответа";
         // модели, которые отклонили именно этот запрос (400): повторять их бессмысленно
@@ -190,6 +215,7 @@ public final class OpenAiClient {
     static String buildRequest(String model, List<Message> history, boolean withReasoning) {
         // Склеиваем подряд идущие реплики одной роли и начинаем с user: так принимают все провайдеры.
         List<String[]> turns = new ArrayList<>();
+        List<List<String>> turnImages = new ArrayList<>();
         StringBuilder system = new StringBuilder(SYSTEM_PROMPT);
         boolean hasLanguageRule = false;
         for (Message m : history) {
@@ -203,9 +229,13 @@ public final class OpenAiClient {
                 continue;
             }
             if (!turns.isEmpty() && turns.get(turns.size() - 1)[0].equals(role)) {
-                turns.get(turns.size() - 1)[1] += "\n\n" + m.getContent();
+                String prev = turns.get(turns.size() - 1)[1];
+                turns.get(turns.size() - 1)[1] = prev.isBlank() ? m.getContent()
+                        : m.getContent().isBlank() ? prev : prev + "\n\n" + m.getContent();
+                turnImages.get(turnImages.size() - 1).addAll(m.getImages());
             } else {
                 turns.add(new String[]{role, m.getContent()});
+                turnImages.add(new ArrayList<>(m.getImages()));
             }
         }
         StringBuilder sb = new StringBuilder("{\"model\":").append(Json.quote(model)).append(",\"messages\":[");
@@ -215,8 +245,28 @@ public final class OpenAiClient {
         sb.append("{\"role\":\"system\",\"content\":").append(Json.quote(system.toString())).append('}');
         for (int i = 0; i < turns.size(); i++) {
             sb.append(',');
-            sb.append("{\"role\":\"").append(turns.get(i)[0]).append("\",\"content\":")
-                    .append(Json.quote(turns.get(i)[1])).append('}');
+            sb.append("{\"role\":\"").append(turns.get(i)[0]).append("\",\"content\":");
+            List<String> imgs = turnImages.get(i);
+            if (imgs.isEmpty()) {
+                sb.append(Json.quote(turns.get(i)[1]));
+            } else {
+                // сообщение с картинками: массив частей «текст + изображения» (формат OpenAI / Groq)
+                sb.append('[');
+                boolean first = true;
+                if (!turns.get(i)[1].isBlank()) {
+                    sb.append("{\"type\":\"text\",\"text\":").append(Json.quote(turns.get(i)[1])).append('}');
+                    first = false;
+                }
+                for (String url : imgs) {
+                    if (!first) {
+                        sb.append(',');
+                    }
+                    sb.append("{\"type\":\"image_url\",\"image_url\":{\"url\":").append(Json.quote(url)).append("}}");
+                    first = false;
+                }
+                sb.append(']');
+            }
+            sb.append('}');
         }
         sb.append("],\"temperature\":0.7");
         String effort = withReasoning ? reasoningEffort(model) : null;

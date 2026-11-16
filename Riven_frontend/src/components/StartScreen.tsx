@@ -3,18 +3,21 @@ import { useStore } from "../store";
 import { useT } from "../lib/i18n";
 import { IconSend } from "./Icons";
 import { Tagline, Wordmark } from "./Brand";
+import { AttachButton, AttachPreview, useAttachments } from "./Attachments";
 
 export function StartScreen() {
   const { sendMessage } = useStore();
   const t = useT();
   const [text, setText] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
-  const canSend = text.trim().length > 0;
+  const att = useAttachments();
+  const canSend = text.trim().length > 0 || att.images.length > 0;
 
   const submit = () => {
     if (!canSend) return;
-    sendMessage(text);
+    sendMessage(text, att.images);
     setText("");
+    att.clear();
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -39,8 +42,13 @@ export function StartScreen() {
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={onKeyDown}
+            onPaste={att.onPaste}
             placeholder={t.startPlaceholder}
           />
+          <AttachPreview images={att.images} onRemove={att.remove} error={att.error} />
+          <div className="start-attach">
+            <AttachButton onFiles={(f) => void att.add(f)} />
+          </div>
           <button className="send-fab" disabled={!canSend} onClick={submit} aria-label={t.start} title={t.start}>
             <IconSend size={18} />
           </button>

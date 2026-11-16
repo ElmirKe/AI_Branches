@@ -10,6 +10,11 @@ import {
   ArrowsHorizontal,
   ArrowsVertical,
   GearSix,
+  ImageSquare,
+  DotsThree,
+  PencilSimple,
+  Trash,
+  X,
 } from "@phosphor-icons/react";
 
 type P = { size?: number; className?: string };
@@ -26,6 +31,11 @@ export const IconMerge = (p: P) => <GitMerge weight={W} {...p} />;
 export const IconHoriz = (p: P) => <ArrowsHorizontal weight={W} {...p} />;
 export const IconVert = (p: P) => <ArrowsVertical weight={W} {...p} />;
 export const IconGear = (p: P) => <GearSix weight={W} {...p} />;
+export const IconImage = (p: P) => <ImageSquare weight={W} {...p} />;
+export const IconDots = (p: P) => <DotsThree weight={W} {...p} />;
+export const IconEdit = (p: P) => <PencilSimple weight={W} {...p} />;
+export const IconTrash = (p: P) => <Trash weight={W} {...p} />;
+export const IconClose = (p: P) => <X weight={W} {...p} />;
 export const IconLogout = (p: P) => <SignOut weight={W} {...p} />;
 
 /** Компактный знак для маленьких мест (вкладка, аватар). */

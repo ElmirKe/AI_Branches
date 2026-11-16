@@ -43,3 +43,27 @@ create policy "messages: owner" on public.messages
 
 grant select, insert, update, delete on public.chats    to authenticated;
 grant select, insert, update, delete on public.messages to authenticated;
+
+-- ---------------------------------------------------------------- картинки
+-- Пути к картинкам сообщения (сами файлы лежат в Storage, бакет images).
+alter table public.messages add column if not exists images text[] not null default '{}';
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('images', 'images', false, 5242880, array['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+on conflict (id) do nothing;
+
+-- файлы лежат в папке <id пользователя>/<id чата>/…, каждый видит только свою папку
+drop policy if exists "images: owner read" on storage.objects;
+create policy "images: owner read" on storage.objects
+  for select to authenticated
+  using (bucket_id = 'images' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "images: owner upload" on storage.objects;
+create policy "images: owner upload" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'images' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "images: owner delete" on storage.objects;
+create policy "images: owner delete" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'images' and (storage.foldername(name))[1] = auth.uid()::text);

@@ -809,3 +809,236 @@ textarea:focus {
   text-transform: none;
   letter-spacing: 0;
 }
+
+/* ---------- картинки ---------- */
+.attach-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-ctl);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.attach-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--main-line);
+}
+.attach-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.composer-actions {
+  justify-content: space-between;
+  align-items: center;
+}
+.start-attach {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+}
+.start-input textarea {
+  padding-bottom: 56px;
+}
+.attach-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+.start-input .attach-row {
+  position: absolute;
+  left: 56px;
+  bottom: 12px;
+  margin: 0;
+}
+.attach-thumb {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--r-ctl);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.start-input .attach-thumb {
+  width: 34px;
+  height: 34px;
+}
+.attach-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.attach-thumb button {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(5, 6, 13, 0.75);
+  color: #fff;
+  cursor: pointer;
+}
+.attach-error {
+  font-size: 12px;
+  color: var(--danger, #e06666);
+}
+.msg-imgs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.msg.from-user .msg-imgs {
+  justify-content: flex-end;
+}
+.msg-img {
+  display: block;
+  width: 120px;
+  height: 120px;
+  border-radius: var(--r-card);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--tint);
+}
+.msg-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.msg-imgs.small {
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.msg-imgs.small .msg-img {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+}
+
+/* ---------- список чатов: меню ---------- */
+.chat-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.chat-row .chat-item {
+  flex: 1;
+  min-width: 0;
+}
+.chat-more {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--r-ctl);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+.chat-row:hover .chat-more,
+.chat-row.active .chat-more,
+.chat-row.menu-open .chat-more,
+.chat-more:focus-visible {
+  opacity: 1;
+}
+.chat-more:hover {
+  background: var(--tint);
+  color: var(--text-primary);
+}
+@media (hover: none) {
+  .chat-more {
+    opacity: 1;
+  }
+}
+.chat-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 30;
+  min-width: 180px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-md);
+}
+.theme-dark .chat-menu {
+  background: #0b0c1b;
+}
+.chat-menu > button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--r-ctl);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.chat-menu > button:hover {
+  background: var(--tint);
+}
+.chat-menu .danger {
+  color: var(--danger, #e06666);
+}
+.chat-menu p {
+  margin: 4px 6px 8px;
+  font-size: 13px;
+}
+.chat-menu-row {
+  display: flex;
+  gap: 6px;
+}
+.chat-menu-row button {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-ctl);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.chat-menu-row .solid {
+  background: #c94f4f;
+  border-color: #c94f4f;
+  color: #fff;
+}
+.chat-item.editing {
+  display: flex;
+  align-items: center;
+}
+.chat-rename {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--main-line);
+  border-radius: var(--r-ctl);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}

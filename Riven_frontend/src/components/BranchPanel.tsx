@@ -3,6 +3,7 @@ import { useStore } from "../store";
 import { isMergeNode, lineage, sisters } from "../lib/layout";
 import { displayBranch, useLang, useT } from "../lib/i18n";
 import { IconBranch, IconMerge, IconSend } from "./Icons";
+import { AttachButton, AttachPreview, MessageImages, useAttachments } from "./Attachments";
 import { Markdown } from "./Markdown";
 
 export function BranchPanel() {
@@ -32,12 +33,14 @@ export function BranchPanel() {
     (k) => k.branch === selected.branch && !isMergeNode(k),
   );
   const branchOn = state.branchMode || forcedBranch;
-  const canSend = text.trim().length > 0 && !merging && !selected.pending;
+  const att = useAttachments();
+  const canSend = (text.trim().length > 0 || att.images.length > 0) && !merging && !selected.pending;
 
   const submit = () => {
     if (!canSend) return;
-    sendMessage(text);
+    sendMessage(text, att.images);
     setText("");
+    att.clear();
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -62,7 +65,8 @@ export function BranchPanel() {
           return (
             <div key={m.id} className={"msg" + (merge ? " merge" : "") + (m.role === "user" ? " from-user" : " from-ai")}>
               <span className="caption">{merge ? t.merge : m.role === "user" ? t.you : t.assistant}</span>
-              <div className="msg-text">{m.pending ? <span className="typing" aria-label={t.typing}><i /><i /><i /></span> : m.role === "assistant" ? <Markdown text={m.text} /> : <span className="plain">{m.text}</span>}</div>
+              <MessageImages images={m.images} />
+              {(m.pending || m.text) && <div className="msg-text">{m.pending ? <span className="typing" aria-label={t.typing}><i /><i /><i /></span> : m.role === "assistant" ? <Markdown text={m.text} /> : <span className="plain">{m.text}</span>}</div>}
             </div>
           );
         })}
@@ -103,9 +107,12 @@ export function BranchPanel() {
           disabled={merging}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
+          onPaste={att.onPaste}
           placeholder={branchOn ? t.branchPlaceholder : t.continuePlaceholder}
         />
+        <AttachPreview images={att.images} onRemove={att.remove} error={att.error} />
         <div className="composer-actions">
+          <AttachButton onFiles={(f) => void att.add(f)} disabled={merging} />
           <button className="btn btn-primary" disabled={!canSend} onClick={submit}>
             {branchOn ? t.branch : t.send} <IconSend size={15} />
           </button>

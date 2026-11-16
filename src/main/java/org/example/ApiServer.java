@@ -31,7 +31,10 @@ import java.util.function.Function;
  */
 public final class ApiServer {
 
-    static final int MAX_BODY_BYTES = 1_000_000;
+    static final int MAX_BODY_BYTES = 8_000_000; // с картинками запрос бывает несколько мегабайт
+    /** столько картинок за раз принимает модель-зрение на Groq; более старые отбрасываются */
+    static final int MAX_IMAGES = 3;
+    static final int MAX_IMAGE_CHARS = 3_000_000;
     static final int MAX_MESSAGES = 200;
     static final int MAX_CONTENT_CHARS = 20_000;
 
@@ -286,6 +289,27 @@ public final class ApiServer {
         return "ru".equals(v) || "en".equals(v) ? (String) v : null;
     }
 
+    /** Оставляет только последние limit картинок истории; у более ранних сообщений картинки убираются. */
+    static List<Message> keepLastImages(List<Message> history, int limit) {
+        int left = limit;
+        List<Message> out = new ArrayList<>(history);
+        for (int i = out.size() - 1; i >= 0; i--) {
+            Message m = out.get(i);
+            List<String> imgs = m.getImages();
+            if (imgs.isEmpty()) {
+                continue;
+            }
+            int keep = Math.min(left, imgs.size());
+            left -= keep;
+            if (keep < imgs.size()) {
+                String note = m.getContent().isBlank() ? "(картинка)" : m.getContent() + "\n(к сообщению была приложена картинка)";
+                out.set(i, new Message(m.getId(), m.getBranchId(), m.getRole(), keep == 0 ? note : m.getContent(),
+                        imgs.subList(imgs.size() - keep, imgs.size())));
+            }
+        }
+        return out;
+    }
+
     static List<Message> parseHistory(String body) {
         Object root = Json.parse(body);
         if (!(root instanceof Map<?, ?> obj)) {
@@ -307,18 +331,29 @@ public final class ApiServer {
                     || !(role.equals("user") || role.equals("assistant"))) {
                 throw new BadRequest("role должен быть \"user\" или \"assistant\"");
             }
-            if (!(m.get("content") instanceof String content) || content.isBlank()) {
+            List<String> images = new ArrayList<>();
+            if (m.get("images") instanceof List<?> imgs) {
+                for (Object img : imgs) {
+                    if (img instanceof String s && s.length() <= MAX_IMAGE_CHARS
+                            && (s.startsWith("data:image/") || s.startsWith("https://"))) {
+                        images.add(s);
+                    } else {
+                        throw new BadRequest("Картинка должна быть data:image/... или https-ссылкой до 3 МБ");
+                    }
+                }
+            }
+            if (!(m.get("content") instanceof String content) || (content.isBlank() && images.isEmpty())) {
                 throw new BadRequest("content должен быть непустой строкой");
             }
             if (content.length() > MAX_CONTENT_CHARS) {
                 throw new BadRequest("Сообщение длиннее " + MAX_CONTENT_CHARS + " символов");
             }
-            out.add(new Message(id++, 0, role, content));
+            out.add(new Message(id++, 0, role, content, "user".equals(role) ? images : List.of()));
         }
         if (!"user".equals(out.get(out.size() - 1).getRole())) {
             throw new BadRequest("Последнее сообщение должно быть от пользователя");
         }
-        return out;
+        return keepLastImages(out, MAX_IMAGES);
     }
 
     // -------------------------------------------------------------------- CORS

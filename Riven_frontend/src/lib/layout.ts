@@ -142,10 +142,13 @@ export function leafBranchNames(m: Message, byId: Map<string, Message>): string[
 export function buildMergeNode(messages: Message[], ids: string[]): Message {
   const idx = buildIndex(messages);
   const members = ids.map((i) => idx.byId.get(i)).filter((m): m is Message => !!m);
-  const leaves = members.flatMap((m) => leafBranchNames(m, idx.byId));
+  // «Основная» ничего не говорит о содержании: вместо неё — начало сообщения; точку в конце имени убираем
+  const nameOf = (m: Message, name: string) =>
+    (name === ROOT_BRANCH ? truncate(m.text.replace(/\s+/g, " "), 28) : name).replace(/[.\s]+$/, "");
+  const leaves = members.flatMap((m) => leafBranchNames(m, idx.byId).map((n) => nameOf(m, n)));
   const text =
     tr().mergeText(leaves.join(", ")) + "\n\n" +
-    members.map((m) => `${m.branch} — ${branchSummary(m, idx)}`).join("\n\n");
+    members.map((m) => `${nameOf(m, m.branch)}: ${branchSummary(m, idx)}`).join("\n\n");
   return {
     id: uid("merge"),
     parents: members.map((m) => m.id),

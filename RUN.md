@@ -117,3 +117,10 @@ VITE_SUPABASE_ANON_KEY=ваш_публичный_ключ
 2. Frontend выложить на Vercel/Netlify (папка проекта — `Riven_frontend`). Адреса вшиваются в сайт
    при сборке: `VITE_API_URL` и `VITE_SUPABASE_*` лежат в `Riven_frontend/.env.production`.
 3. Секретные ключи (ИИ, `service_role`) никогда не кладите в frontend и не коммитьте в git.
+
+
+## Картинки (ноябрь 2026)
+
+- Модель для картинок задаётся переменной `LLM_VISION_MODELS` в Render (по умолчанию `qwen/qwen3.8-27b`, Groq). Без картинок используются обычные `LLM_MODELS`.
+- В одном запросе к ИИ не больше 3 картинок: сайт и сервер оставляют последние три.
+- Один раз выполнить в Supabase → SQL Editor файл `Riven_frontend/supabase/2026-11-images.sql`: он добавляет колонку `messages.images` и бакет `images` с доступом только к своей папке. Без него сайт работает, но картинки не сохраняются после перезагрузки.

@@ -44,8 +44,11 @@ public class Main {
             java.util.List<String> models = env("LLM_MODELS") == null
                     ? OpenAiClient.DEFAULT_MODELS
                     : Arrays.stream(env("LLM_MODELS").split(",")).map(String::trim).filter(m -> !m.isEmpty()).toList();
-            ai = new OpenAiClient(llmKey, models, baseUrl)::ask;
-            description = "OpenAI-совместимый API " + baseUrl + ", модели по очереди: " + models;
+            java.util.List<String> vision = env("LLM_VISION_MODELS") == null
+                    ? OpenAiClient.DEFAULT_VISION_MODELS
+                    : Arrays.stream(env("LLM_VISION_MODELS").split(",")).map(String::trim).filter(m -> !m.isEmpty()).toList();
+            ai = new OpenAiClient(llmKey, models, vision, baseUrl)::ask;
+            description = "OpenAI-совместимый API " + baseUrl + ", модели по очереди: " + models + ", для картинок: " + vision;
         } else {
             // Список моделей по порядку: если первая перегружена, берётся следующая.
             java.util.List<String> models = env("GEMINI_MODELS") == null

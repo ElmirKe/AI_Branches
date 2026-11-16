@@ -16,7 +16,15 @@ interface MessageRow {
   role: "user" | "assistant";
   branch: string;
   text: string;
+  images?: string[] | null;
 }
+
+/**
+ * Есть ли в базе колонка messages.images. Если SQL-обновление для картинок ещё не выполнено,
+ * сайт продолжает работать, просто без сохранения картинок.
+ */
+let hasImagesColumn = true;
+const missingImages = (msg: string) => /images/.test(msg) && /column|schema cache/i.test(msg);
 
 function client() {
   if (!supabase) throw new Error("Supabase не настроен");
@@ -36,16 +44,24 @@ export async function loadTrees(): Promise<ChatTree[]> {
 
   const byChat = new Map<string, Message[]>();
   for (let from = 0; ; from += PAGE) {
+    const cols = hasImagesColumn ? "chat_id,id,parents,role,branch,text,images" : "chat_id,id,parents,role,branch,text";
     const { data, error: e2 } = await db
       .from("messages")
-      .select("chat_id,id,parents,role,branch,text")
+      .select(cols)
       .order("seq", { ascending: true })
       .range(from, from + PAGE - 1);
+    if (e2 && hasImagesColumn && missingImages(e2.message)) {
+      hasImagesColumn = false;
+      from -= PAGE;
+      continue;
+    }
     if (e2) throw new Error(e2.message);
-    const page = (data ?? []) as MessageRow[];
+    const page = (data ?? []) as unknown as MessageRow[];
     for (const r of page) {
       const list = byChat.get(r.chat_id) ?? [];
-      list.push({ id: r.id, parents: r.parents ?? [], role: r.role, branch: r.branch, text: r.text });
+      const msg: Message = { id: r.id, parents: r.parents ?? [], role: r.role, branch: r.branch, text: r.text };
+      if (r.images && r.images.length > 0) msg.images = r.images;
+      list.push(msg);
       byChat.set(r.chat_id, list);
     }
     if (page.length < PAGE) break;
@@ -79,18 +95,27 @@ export async function saveChat(tree: ChatTree): Promise<void> {
 /** Создаёт или обновляет сообщения чата. Порядок вставки сохраняется (колонка seq). */
 export async function saveMessages(chatId: string, messages: Message[]): Promise<void> {
   if (messages.length === 0) return;
-  const { error } = await client()
-    .from("messages")
-    .upsert(
-      messages.map((m) => ({
-        chat_id: chatId,
-        id: m.id,
-        parents: m.parents,
-        role: m.role,
-        branch: m.branch,
-        text: m.text,
-      })),
-      { onConflict: "chat_id,id" },
-    );
+  const rows = (withImages: boolean) =>
+    messages.map((m) => ({
+      chat_id: chatId,
+      id: m.id,
+      parents: m.parents,
+      role: m.role,
+      branch: m.branch,
+      text: m.text,
+      // в базу идут только пути загруженных файлов, не data:URL
+      ...(withImages ? { images: (m.images ?? []).filter((x) => !x.startsWith("data:")) } : {}),
+    }));
+  let { error } = await client().from("messages").upsert(rows(hasImagesColumn), { onConflict: "chat_id,id" });
+  if (error && hasImagesColumn && missingImages(error.message)) {
+    hasImagesColumn = false;
+    ({ error } = await client().from("messages").upsert(rows(false), { onConflict: "chat_id,id" }));
+  }
+  if (error) throw new Error(error.message);
+}
+
+/** Удаляет чат; его сообщения база удаляет сама (on delete cascade). */
+export async function deleteChat(chatId: string): Promise<void> {
+  const { error } = await client().from("chats").delete().eq("id", chatId);
   if (error) throw new Error(error.message);
 }

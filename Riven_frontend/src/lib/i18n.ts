@@ -153,6 +153,19 @@ const ru = {
   errReply: "Не удалось получить ответ.",
   mergeText: (names: string) => `Свод веток: ${names}.`,
   mergeBranch: "Свод",
+  imageMsg: "Картинка",
+  imageNote: "(к сообщению была приложена картинка)",
+  attach: "Прикрепить картинку",
+  removeImage: "Убрать картинку",
+  openImage: "Открыть картинку",
+  imgType: "Можно прикреплять только картинки.",
+  imgSize: "Картинка больше 20 МБ.",
+  imgMax: "Не больше 3 картинок в одном сообщении.",
+  rename: "Переименовать",
+  delete: "Удалить",
+  deleteAsk: "Удалить чат насовсем?",
+  chatActions: "Действия с чатом",
+  chatName: "Название чата",
 };
 
 type Dict = typeof ru;
@@ -246,6 +259,19 @@ const en: Dict = {
   errReply: "Couldn't get an answer.",
   mergeText: (names) => `Merged branches: ${names}.`,
   mergeBranch: "Merge",
+  imageMsg: "Image",
+  imageNote: "(an image was attached to this message)",
+  attach: "Attach an image",
+  removeImage: "Remove image",
+  openImage: "Open image",
+  imgType: "Only images can be attached.",
+  imgSize: "The image is larger than 20 MB.",
+  imgMax: "At most 3 images per message.",
+  rename: "Rename",
+  delete: "Delete",
+  deleteAsk: "Delete this chat for good?",
+  chatActions: "Chat actions",
+  chatName: "Chat name",
 };
 
 const DICTS: Record<Lang, Dict> = { ru, en };

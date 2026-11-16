@@ -6,6 +6,8 @@ export interface Message {
   role: Role;
   branch: string; // имя ветки
   text: string;
+  /** картинки (только у сообщений пользователя): путь в хранилище или data:URL, пока не загружена */
+  images?: string[];
   pending?: boolean;
   /** ответ не удалось получить: текст — сообщение об ошибке, в контекст ИИ не попадает */
   error?: boolean;
