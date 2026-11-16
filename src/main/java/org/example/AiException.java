@@ -5,4 +5,11 @@ public class AiException extends RuntimeException {
     public AiException(String message) {
         super(message);
     }
+
+    /** Модели перегружены или не ответили вовремя: можно попробовать другие модели. */
+    public static class Unavailable extends AiException {
+        public Unavailable(String message) {
+            super(message);
+        }
+    }
 }

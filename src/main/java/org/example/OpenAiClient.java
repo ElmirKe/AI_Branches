@@ -87,10 +87,38 @@ public final class OpenAiClient {
 
     /** История (последнее — от пользователя) -> ответ модели. */
     public String ask(List<Message> history) {
-        // есть картинки — отвечает модель-зрение, иначе обычные модели
         boolean withImages = history.stream().anyMatch(m -> !m.getImages().isEmpty());
-        List<String> models = withImages ? visionModels : this.models;
-        long deadline = System.nanoTime() + totalTimeout.toNanos();
+        if (!withImages) {
+            return askModels(models, history, totalTimeout);
+        }
+        // есть картинки — отвечает модель-зрение; если она перегружена (на бесплатном Groq лимит у неё
+        // маленький), отвечает обычная модель, а картинки заменяются пометкой
+        try {
+            return askModels(visionModels, history, totalTimeout.dividedBy(2));
+        } catch (AiException.Unavailable e) {
+            System.err.println("[ai] модель для картинок недоступна, отвечаем без картинок");
+            return askModels(models, withoutImages(history), totalTimeout.dividedBy(2));
+        }
+    }
+
+    /** Та же история, но картинки заменены пометкой для модели. */
+    static List<Message> withoutImages(List<Message> history) {
+        List<Message> out = new ArrayList<>();
+        for (Message m : history) {
+            if (m.getImages().isEmpty()) {
+                out.add(m);
+                continue;
+            }
+            String note = "[к сообщению приложена картинка, но сейчас ты её не видишь: если она нужна для ответа, "
+                    + "честно скажи об этом и попроси повторить попытку через минуту]";
+            String text = m.getContent().isBlank() ? note : m.getContent() + "\n" + note;
+            out.add(new Message(m.getId(), m.getBranchId(), m.getRole(), text));
+        }
+        return out;
+    }
+
+    private String askModels(List<String> models, List<Message> history, Duration budget) {
+        long deadline = System.nanoTime() + budget.toNanos();
         String lastProblem = "нет ответа";
         // модели, которые отклонили именно этот запрос (400): повторять их бессмысленно
         java.util.Set<String> rejected = new java.util.HashSet<>();
@@ -104,7 +132,7 @@ public final class OpenAiClient {
                 }
                 long left = deadline - System.nanoTime();
                 if (left < Duration.ofSeconds(2).toNanos()) {
-                    throw new AiException("ИИ сейчас перегружен и не успел ответить. Попробуйте ещё раз через минуту.");
+                    throw new AiException.Unavailable("ИИ сейчас перегружен и не успел ответить. Попробуйте ещё раз через минуту.");
                 }
                 Duration timeout = Duration.ofNanos(Math.min(left, attemptTimeout.toNanos()));
                 boolean withReasoning = true;
@@ -148,7 +176,7 @@ public final class OpenAiClient {
                         otherProblems = true;
                         lastProblem = "модель " + model + " ответила " + code;
                     } catch (AiException e) {
-                        throw e;
+                        throw e; // 401/403: ключ неверный, другие модели не помогут
                     } catch (java.net.http.HttpTimeoutException e) {
                         otherProblems = true;
                         lastProblem = "модель " + model + " не ответила вовремя";
@@ -169,7 +197,7 @@ public final class OpenAiClient {
         if (!otherProblems && rejected.size() == models.size() && rejectedDetail != null) {
             throw new AiException(explainFatal(400, rejectedDetail));
         }
-        throw new AiException("ИИ сейчас недоступен или перегружен (" + lastProblem + "). Попробуйте ещё раз через минуту.");
+        throw new AiException.Unavailable("ИИ сейчас недоступен или перегружен (" + lastProblem + "). Попробуйте ещё раз через минуту.");
     }
 
     // ------------------------------------------------------------ request/response
