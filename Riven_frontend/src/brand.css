@@ -1068,3 +1068,33 @@ textarea:focus {
 .card.in-family.selected {
   border-color: transparent;
 }
+
+/* ---------- вход через Google ---------- */
+.google-btn {
+  width: 100%;
+  justify-content: center;
+  gap: 10px;
+  padding: 11px 12px;
+  background: #ffffff;
+  color: #1f1f1f;
+  border-color: #dadce0;
+  font-weight: 500;
+}
+.google-btn:hover:not(:disabled) {
+  background: #f4f5f9;
+  border-color: #dadce0;
+}
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.auth-or::before,
+.auth-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}

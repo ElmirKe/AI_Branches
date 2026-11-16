@@ -166,6 +166,8 @@ const ru = {
   deleteAsk: "Удалить чат насовсем?",
   chatActions: "Действия с чатом",
   chatName: "Название чата",
+  google: "Войти через Google",
+  or: "или по почте",
 };
 
 type Dict = typeof ru;
@@ -272,6 +274,8 @@ const en: Dict = {
   deleteAsk: "Delete this chat for good?",
   chatActions: "Chat actions",
   chatName: "Chat name",
+  google: "Continue with Google",
+  or: "or with email",
 };
 
 const DICTS: Record<Lang, Dict> = { ru, en };
